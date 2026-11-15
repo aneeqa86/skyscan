@@ -208,3 +208,5 @@ USGS_INDEX_URL = config(
     "USGS_INDEX_URL",
     default="https://raw.githubusercontent.com/hobuinc/usgs-lidar/master/boundaries/resources.geojson",
 )
+# Overture release for reference footprints; blank = newest release in the bucket.
+OVERTURE_RELEASE = config("OVERTURE_RELEASE", default="")
