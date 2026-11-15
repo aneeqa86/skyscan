@@ -47,5 +47,5 @@ jobs:
         run: docker compose build api
       - name: Start PostGIS and Redis
         run: docker compose up -d --wait db redis
-      - name: Run tests (no network needed: fixtures and mocks)
+      - name: "Run tests (no network needed: fixtures and mocks)"
         run: docker compose run --rm -T api python manage.py test apps --noinput
