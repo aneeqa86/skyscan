@@ -8,7 +8,7 @@ from apps.lidar.pipeline import pointcloud
 from apps.lidar.pipeline.aoi import AoiError, area_km2, utm_epsg, validate_aoi
 from apps.lidar.pipeline.fetch import DTYPE
 from apps.lidar.pipeline.mask import MaskParams, building_mask
-from apps.lidar.pipeline.raster import Grid, build_surfaces, grid_reduce, local_roughness
+from apps.lidar.pipeline.raster import Grid, build_surfaces, grid_reduce, local_roughness, sky_noise_mask
 from apps.lidar.pipeline.vectorize import estimate_floors, regularize, vectorize
 
 
@@ -218,3 +218,17 @@ class PointCloudTests(SimpleTestCase):
     def test_decimate_caps(self):
         self.assertEqual(len(pointcloud.decimate(10)), 10)
         self.assertEqual(len(pointcloud.decimate(1_000_000)), pointcloud.MAX_POINTS)
+
+
+class SkyNoiseTests(SimpleTestCase):
+    def test_isolated_high_returns_removed_roofs_kept(self):
+        pts = synthetic_points()
+        n = len(pts)
+        noise = np.zeros(3, dtype=pts.dtype)
+        noise["X"], noise["Y"], noise["Z"] = 500005.0, 4500050.0, [400.0, 401.0, 402.5]
+        noise["NumberOfReturns"], noise["ReturnNumber"], noise["Classification"] = 1, 1, 1
+        allpts = np.concatenate([pts, noise])
+        grid = Grid.from_bounds(500000, 4500000, 500060, 4500060, 0.5, 32618)
+        keep = sky_noise_mask(grid, allpts)
+        self.assertFalse(keep[n:].any())  # the three sky points
+        self.assertTrue(keep[:n].all())  # nothing real, including the 12 m roof and the tree

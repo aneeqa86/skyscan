@@ -110,7 +110,7 @@ validation code on 2026-11-15:
 |---|---|---|---|---|---|---|---|---|
 | Seattle, Capitol Hill: detached houses, mature trees | WA_KingCo_1_2021 | 12 | 324 / 327 | 0.75 | 0.74 | **0.74** | 0.78 | 2.2 m (241) |
 | Chicago, Lincoln Park: row houses, alley garages, park | Cook County 2017 | 27 (read at ~15) | 233 / 325 | 0.49 | 0.35 | **0.41** | 0.69 | 1.4 m (114) |
-| New York, Midtown: towers, setbacks, shared walls | NY_NewYorkCity (2014) | 4 | 295 / 127 | 0.16 | 0.36 | **0.22** | 0.68 | 10.0 m (46) |
+| New York, Midtown: towers, setbacks, shared walls | NY_NewYorkCity (2014) | 4 | 294 / 127 | 0.16 | 0.36 | **0.22** | 0.68 | 10.0 m (46) |
 | Los Angeles, South Park: towers, dense street trees | LA County 2023 | 19 (read at ~15) | 549 / 80 | 0.07 | 0.48 | **0.12** | 0.76 | 14.0 m (33) |
 
 What changed the numbers during tuning:

@@ -20,7 +20,7 @@ from . import pointcloud
 from .aoi import aoi_utm_epsg
 from .fetch import ensure_ground, fetch_points
 from .mask import MaskParams, building_mask
-from .raster import Grid, Surfaces, build_surfaces, sample_raster
+from .raster import Grid, Surfaces, build_surfaces, sample_raster, sky_noise_mask
 from .vectorize import Footprint, vectorize
 
 Progress = Callable[[str, int, str], None]
@@ -113,6 +113,9 @@ def process_epoch(
 ) -> EpochResult:
     """Steps 4-7 on already fetched points (shared by measure and change)."""
     progress("rasterizing", pct[0], "Building terrain and surface models")
+    keep = sky_noise_mask(grid, points)
+    if not keep.all():
+        points, ground_mask = points[keep], ground_mask[keep]
     surfaces = build_surfaces(grid, points, ground_mask)
     progress("classifying", pct[1], "Separating buildings from trees")
     mp = MaskParams.from_params(params)

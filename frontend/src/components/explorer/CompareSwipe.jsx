@@ -25,14 +25,28 @@ export default function CompareSwipe({ mainMap, leftLabel, rightLabel, children 
       attributionControl: false,
       antialias: true,
     })
+    if (import.meta.env.DEV) window.__skyscanCompareMap = m // debugging aid in development only
     const sync = () =>
       m.jumpTo({ center: mainMap.getCenter(), zoom: mainMap.getZoom(), pitch: mainMap.getPitch(), bearing: mainMap.getBearing() })
     mainMap.on('move', sync)
-    m.on('load', () => {
+    // The map can measure its container before the clipped wrapper has its
+    // final size and then never paints a first frame (so 'load' never fires).
+    // Resize on the next frame, and accept the first idle with a loaded style.
+    let ready = false
+    const onReady = () => {
+      if (ready || !m.isStyleLoaded()) return
+      ready = true
       sync()
       setMap(m)
+    }
+    m.on('load', onReady)
+    m.on('idle', onReady)
+    const raf = requestAnimationFrame(() => {
+      m.resize()
+      m.triggerRepaint()
     })
     return () => {
+      cancelAnimationFrame(raf)
       mainMap.off('move', sync)
       setMap(null)
       m.remove()
@@ -57,11 +71,12 @@ export default function CompareSwipe({ mainMap, leftLabel, rightLabel, children 
   return (
     <>
       <div
-        ref={container}
         className="pointer-events-none absolute inset-0 z-[5]"
         style={{ clipPath: `inset(0 0 0 ${pos}%)` }}
         aria-hidden="true"
-      />
+      >
+        <div ref={container} className="h-full w-full" />
+      </div>
       {map && children?.(map)}
       <div className="pointer-events-none absolute inset-y-0 z-[6]" style={{ left: `${pos}%` }}>
         <div className="absolute inset-y-0 -ml-px w-px bg-fg/70" />
@@ -77,8 +92,8 @@ export default function CompareSwipe({ mainMap, leftLabel, rightLabel, children 
         >
           ⇆
         </button>
-        <span className="chip absolute top-3 -translate-x-[calc(100%+8px)] border-line bg-ink-800 text-fg">{leftLabel}</span>
-        <span className="chip absolute top-3 translate-x-2 border-line bg-ink-800 text-fg">{rightLabel}</span>
+        <span className="chip absolute top-16 -translate-x-[calc(100%+8px)] border-line bg-ink-800 text-fg">{leftLabel}</span>
+        <span className="chip absolute top-16 translate-x-2 border-line bg-ink-800 text-fg">{rightLabel}</span>
       </div>
       <label className="sr-only" htmlFor="compare-pos">
         Compare position

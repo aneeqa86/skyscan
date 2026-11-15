@@ -169,6 +169,34 @@ def local_roughness(dsm: np.ndarray, size: int = 5) -> np.ndarray:
     return np.sqrt(np.clip(ndimage.uniform_filter(resid * resid, size=size, mode="nearest"), 0, None))
 
 
+def sky_noise_mask(grid: Grid, pts: np.ndarray, jump_m: float = 20.0, passes: int = 2) -> np.ndarray:
+    """True for points to keep; False for isolated high returns (birds, low cloud).
+
+    Surveys do not always flag these as noise (class 18), and the statistical
+    outlier filter can miss small clusters. A cell is a spike when its highest
+    point is more than `jump_m` above everything in a ring 1.5-3.5 m around it;
+    the points causing the spike are dropped. Real roofs are never isolated
+    like that; a thin antenna can be removed, which only affects max height."""
+    x, y, z = pts["X"], pts["Y"], pts["Z"]
+    row, col, ok = grid.cell_of(x, y)
+    keep = np.ones(len(pts), dtype=bool)
+    r_out = max(2, int(round(3.5 / grid.res)))
+    r_in = max(1, int(round(1.5 / grid.res)))
+    yy, xx = np.mgrid[-r_out : r_out + 1, -r_out : r_out + 1]
+    ring = (np.maximum(np.abs(yy), np.abs(xx)) > r_in)
+    for _ in range(passes):
+        top = grid_reduce(grid, x[keep], y[keep], z[keep], "max")
+        filled = np.where(np.isnan(top), -np.inf, top)
+        ring_max = ndimage.maximum_filter(filled, footprint=ring, mode="nearest")
+        spike = np.isfinite(filled) & np.isfinite(ring_max) & (filled - ring_max > jump_m)
+        if not spike.any():
+            break
+        bad = np.zeros(len(pts), dtype=bool)
+        bad[ok] = spike[row[ok], col[ok]] & (z[ok] > ring_max[row[ok], col[ok]] + 2.0)
+        keep &= ~bad
+    return keep
+
+
 MIN_POINTS_PER_WINDOW = 3.0
 
 

@@ -33,14 +33,17 @@ export function usePointCloud(jobId, epoch, enabled) {
   return state
 }
 
-/** deck.gl PointCloudLayer interleaved with the Mapbox map. */
+/** deck.gl PointCloudLayer drawn over the Mapbox map through MapboxOverlay. */
 export function PointCloudOverlay({ map, pc, colorBy }) {
   const overlay = useRef(null)
   const pos = useMemo(() => (pc ? positions(pc) : null), [pc])
   const col = useMemo(() => (pc ? colors(pc, colorBy) : null), [pc, colorBy])
 
   useEffect(() => {
-    overlay.current = new MapboxOverlay({ interleaved: true, layers: [] })
+    // Overlaid (deck's own canvas, camera-synced) rather than interleaved:
+    // buildings are hidden in this view, and interleaving did not attach
+    // its custom layer reliably with Mapbox GL v3.
+    overlay.current = new MapboxOverlay({ interleaved: false, layers: [] })
     map.addControl(overlay.current)
     return () => {
       if (map.getStyle()) map.removeControl(overlay.current)

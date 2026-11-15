@@ -56,6 +56,7 @@ export default function ExplorerPage() {
   const citySlug = params.get('city')
 
   const mapRef = useRef(null)
+  const [mapReady, setMapReady] = useState(false)
   const [cities, setCities] = useState([])
   const [view, setView] = useState('3d')
   const [drawMode, setDrawMode] = useState(null)
@@ -103,11 +104,11 @@ export default function ExplorerPage() {
   const flownTo = useRef(null)
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !job?.aoi || flownTo.current === job.id) return
+    if (!mapReady || !map || !job?.aoi || flownTo.current === job.id) return
     flownTo.current = job.id
     const [w, s, e, n] = bbox(job.aoi)
     map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 340, right: 420 }, pitch: view === '3d' ? 55 : 0, duration: 1200 })
-  }, [job, view])
+  }, [job, view, mapReady])
 
   // Camera pitch follows the 2D / 3D / point cloud switch.
   useEffect(() => {
@@ -271,7 +272,10 @@ export default function ExplorerPage() {
             setDrawMode(null)
           }}
           onDrawCleared={() => setAoi(null)}
-          onReady={(map) => (mapRef.current = map)}
+          onReady={(map) => {
+            mapRef.current = map
+            setMapReady(true)
+          }}
         >
           {(map) => (
             <>
@@ -301,6 +305,7 @@ export default function ExplorerPage() {
                     view={view}
                     opacity={0.7}
                     visible={!points}
+                    neutral
                   />
                   <ChangesLayer
                     map={map}
@@ -319,7 +324,7 @@ export default function ExplorerPage() {
                     >
                       {(m2) => (
                         <>
-                          <BuildingsLayer map={m2} id="bld-after" data={after.data} view={view} opacity={0.7} />
+                          <BuildingsLayer map={m2} id="bld-after" data={after.data} view={view} opacity={0.7} neutral />
                           <ChangesLayer map={m2} data={changes.data} view={view} filter={changeFilterExpr} selectedId={selected?.id} />
                         </>
                       )}

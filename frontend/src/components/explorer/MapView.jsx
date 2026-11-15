@@ -99,6 +99,7 @@ export default function MapView({ initialView, drawMode, onAoiDrawn, onDrawClear
     m.on('error', (e) => {
       if (e?.error?.status === 401) setFailure('bad-token')
     })
+    if (import.meta.env.DEV) window.__skyscanMap = m // debugging aid in development only
     m.on('load', () => {
       setMap(m)
       callbacks.current.onReady?.(m, draw)
@@ -129,7 +130,10 @@ export default function MapView({ initialView, drawMode, onAoiDrawn, onDrawClear
 
   return (
     <div className={className}>
-      <div ref={container} className="absolute inset-0" data-testid="map" />
+      {/* Mapbox sets position: relative on its container, so position a wrapper instead. */}
+      <div className="absolute inset-0">
+        <div ref={container} className="h-full w-full" data-testid="map" />
+      </div>
       {failure && <MapFailure kind={failure} />}
       {map && children?.(map, drawRef.current)}
     </div>

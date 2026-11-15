@@ -63,7 +63,9 @@ export function CoverageLayer({ map, visible = true }) {
       if (map.getStyle()) removeLayers(map, ['coverage-fill', 'coverage-line'])
     }
   }, [map])
-  useEffect(() => setVisible(map, ['coverage-fill', 'coverage-line'], visible), [map, visible])
+  useEffect(() => {
+    setVisible(map, ['coverage-fill', 'coverage-line'], visible)
+  }, [map, visible])
   return null
 }
 
@@ -87,7 +89,11 @@ export function AoiLayer({ map, aoi }) {
  * Buildings as flat polygons (2D) or extruded by height (3D), coloured by height.
  * id: unique prefix (several epochs can be on the map at once).
  */
-export function BuildingsLayer({ map, id = 'buildings', data, view, filter, selectedId, onSelect, visible = true, opacity = 0.92 }) {
+/**
+ * neutral: draw buildings in grey (context for Change mode, so the change
+ * colours carry the meaning instead of competing with the height ramp).
+ */
+export function BuildingsLayer({ map, id = 'buildings', data, view, filter, selectedId, onSelect, visible = true, opacity = 0.92, neutral = false }) {
   const ids = [`${id}-fill`, `${id}-extrusion`, `${id}-outline`, `${id}-selected`]
   const select = useRef(onSelect)
   select.current = onSelect
@@ -95,19 +101,25 @@ export function BuildingsLayer({ map, id = 'buildings', data, view, filter, sele
   useEffect(() => {
     ensureSource(map, id, { type: 'geojson', data: EMPTY, promoteId: 'id' })
     const before = beforeLabels(map)
-    map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': heightColor, 'fill-opacity': 0.85 } }, before)
+    const color = neutral ? '#2A3550' : heightColor
+    map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.85 } }, before)
     map.addLayer({
       id: `${id}-extrusion`,
       type: 'fill-extrusion',
       source: id,
       paint: {
-        'fill-extrusion-color': heightColor,
+        'fill-extrusion-color': color,
         'fill-extrusion-height': ['coalesce', ['get', 'height_m'], 0],
         'fill-extrusion-opacity': opacity,
         'fill-extrusion-vertical-gradient': true,
       },
     })
-    map.addLayer({ id: `${id}-outline`, type: 'line', source: id, paint: { 'line-color': '#00C9A7', 'line-width': 0.5, 'line-opacity': 0.6 } })
+    map.addLayer({
+      id: `${id}-outline`,
+      type: 'line',
+      source: id,
+      paint: { 'line-color': neutral ? '#5B6880' : '#00C9A7', 'line-width': 0.5, 'line-opacity': 0.6 },
+    })
     map.addLayer({
       id: `${id}-selected`,
       type: 'line',
@@ -185,8 +197,12 @@ export function ReferenceLayer({ map, data, visible }) {
       }
     }
   }, [map])
-  useEffect(() => map.getSource('reference')?.setData(data || EMPTY), [map, data])
-  useEffect(() => setVisible(map, ['reference-line'], visible), [map, visible])
+  useEffect(() => {
+    map.getSource('reference')?.setData(data || EMPTY)
+  }, [map, data])
+  useEffect(() => {
+    setVisible(map, ['reference-line'], visible)
+  }, [map, visible])
   return null
 }
 
@@ -243,7 +259,9 @@ export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, vi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map])
 
-  useEffect(() => map.getSource('changes')?.setData(data || EMPTY), [map, data])
+  useEffect(() => {
+    map.getSource('changes')?.setData(data || EMPTY)
+  }, [map, data])
   useEffect(() => {
     const three = view === '3d'
     setVisible(map, ['changes-fill'], visible && !three)

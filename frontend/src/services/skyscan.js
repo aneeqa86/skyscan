@@ -36,7 +36,8 @@ const SkyscanService = {
 
   /** layer: buildings | changes | reference */
   async getJobLayer(id, layer, params = {}) {
-    const { data } = await api.get(`/jobs/${id}/${layer}/`, { params })
+    // Showcase layers are several MB of GeoJSON; allow slow connections.
+    const { data } = await api.get(`/jobs/${id}/${layer}/`, { params, timeout: 120000 })
     return data
   },
 

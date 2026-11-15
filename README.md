@@ -22,12 +22,18 @@ SKYSCAN does two things with free airborne LiDAR from the USGS 3D Elevation Prog
 
 ## What it looks like
 
+**Measure:** 1,714 buildings in Midtown Manhattan, extruded by measured height, with the accuracy card.
+![Measure mode, Midtown Manhattan](docs/screenshots/explorer-measure.png)
+
+**Change:** Denver's Railyards, 2013 | 2020 swipe. New buildings in teal, demolitions in orange.
+![Change mode, Denver Union Station](docs/screenshots/explorer-change.png)
+
+**Point cloud:** the 2020 survey, coloured by height above ground.
+![Point cloud view](docs/screenshots/explorer-pointcloud.png)
+
 | Landing | About and data |
 |---|---|
 | ![Landing page](docs/screenshots/landing.png) | ![About page](docs/screenshots/about.png) |
-
-The explorer (map, 3D buildings, accuracy card, change swipe and point cloud) needs a Mapbox token to render.
-Its screenshots are captured with one; see [Run it](#run-it).
 
 ## How it works
 
@@ -79,7 +85,7 @@ matching one-to-one at IoU ≥ 0.5. Height error is the mean absolute difference
 | Seattle, Capitol Hill (houses, mature trees) | King County 2021 | 0.74 | 0.78 | 2.2 m (241) |
 | Chicago, Lincoln Park (row houses, garages) | Cook County 2017 | 0.41 | 0.69 | 1.4 m (114) |
 | New York, Midtown (towers, shared walls) | NYC 2014 | 0.22 | 0.68 | 10.0 m (46) |
-| Measure showcase: Midtown, 1.1 km² (1,715 buildings) | NYC 2014 | 0.19 | 0.68 | 10.5 m (234) |
+| Measure showcase: Midtown, 1.1 km² (1,714 buildings) | NYC 2014 | 0.19 | 0.68 | 10.5 m (234) |
 
 **Where it works well:** detached and semi-detached buildings, where outlines are unambiguous: F1 around
 0.75 and heights within about 2 m.
