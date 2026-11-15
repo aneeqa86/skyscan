@@ -22,10 +22,18 @@ Notes from checking the index (2026-11-15):
 - 2,284 projects. The index is about 8.8 MB of GeoJSON in EPSG:4326.
 - The acquisition year is parsed from the project name. 2,049 names carry a four-digit year
   (`CA_LosAngeles_2016`) and 231 carry a work-unit suffix (`NY_Hudson_1_D22` means 2022).
-  Four names carry no year: `IA_FullState`, `KY_FullState`, `MN_FullState` and `NY_NewYorkCity`.
-  The first three are statewide mosaics of several collections, so they keep no year and are left
-  out of Change mode. A year for `NY_NewYorkCity` is only set once it has been checked against
-  sampled GPS times (see `YEAR_OVERRIDES` in the loader).
+  767 names end in the year the LAS files were delivered, not flown
+  (`USGS_LPC_IL_4County_Cook_2017_LAS_2019` was flown in 2017), so that suffix is ignored.
+- Six projects have no usable year and are left out of Change mode: the statewide mosaics
+  `IA_FullState`, `KY_FullState` and `MN_FullState`, and three Illinois projects whose names
+  carry only a delivery year.
+- `NY_NewYorkCity` has no year in its name. Points sampled in Midtown have a median GPS time
+  of 2014-03-27 (the post-Hurricane Sandy collection), so it is recorded as 2014. Its average
+  density is about 4 points/m² and it has no building class. It is the only 3DEP project
+  covering Manhattan.
+- Some projects store every point as return 1 of 1 (for example the Cook County 2017
+  project), and some label only part of their roofs as buildings (class 6). The pipeline
+  checks both and adapts (see [METHOD.md](METHOD.md)).
 - Point density in the `Dataset` table is the project's point count divided by its geodesic
   boundary area. It is an average: real density varies within a project (overlap areas, water).
 - Most projects have no reliable building class (class 6), which is why the nDSM building
