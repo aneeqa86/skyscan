@@ -9,6 +9,7 @@ import { CHANGE_TYPES } from '@/components/explorer/changeTypes'
 import CompareSwipe from '@/components/explorer/CompareSwipe'
 import MapView from '@/components/explorer/MapView'
 import MeasurePanel from '@/components/explorer/MeasurePanel'
+import { PointCloudLegend, PointCloudOverlay, usePointCloud } from '@/components/explorer/PointCloud'
 import SurveyPicker from '@/components/explorer/SurveyPicker'
 import { useJob } from '@/hooks/useJob'
 import { SkyscanService } from '@/services'
@@ -69,6 +70,8 @@ export default function ExplorerPage() {
   const [changeFilters, setChangeFilters] = useState(DEFAULT_CHANGE_FILTERS)
   const [pair, setPair] = useState({ before: null, after: null })
   const [compare, setCompare] = useState(true)
+  const [colorBy, setColorBy] = useState('classification')
+  const [pcEpoch, setPcEpoch] = useState('after')
 
   const { job, error: jobError } = useJob(jobId)
   const running = job && !['done', 'failed'].includes(job.status)
@@ -106,10 +109,10 @@ export default function ExplorerPage() {
     map.fitBounds([[w, s], [e, n]], { padding: { top: 80, bottom: 80, left: 340, right: 420 }, pitch: view === '3d' ? 55 : 0, duration: 1200 })
   }, [job, view])
 
-  // Camera pitch follows the 2D / 3D switch.
+  // Camera pitch follows the 2D / 3D / point cloud switch.
   useEffect(() => {
     const map = mapRef.current
-    if (map && view !== 'points') map.easeTo({ pitch: view === '3d' ? 55 : 0, duration: 600 })
+    if (map) map.easeTo({ pitch: view === '2d' ? 0 : view === 'points' ? 60 : 55, duration: 600 })
   }, [view])
 
   // Which surveys cover the drawn area.
@@ -130,6 +133,8 @@ export default function ExplorerPage() {
 
   const isMeasureJob = job?.mode === 'measure'
   const isChangeJob = job?.mode === 'change'
+  const points = view === 'points'
+  const cloud = usePointCloud(job?.status === 'done' ? job.id : null, isChangeJob ? pcEpoch : 'single', points)
   const buildings = useResults(isMeasureJob ? job : null, 'buildings', { epoch: 'single' })
   const reference = useResults(showReference && isMeasureJob ? job : null, 'reference')
   const changes = useResults(isChangeJob ? job : null, 'changes')
@@ -281,6 +286,7 @@ export default function ExplorerPage() {
                     filter={filterExpr}
                     selectedId={selected?.id}
                     onSelect={setSelected}
+                    visible={!points}
                   />
                   <ReferenceLayer map={map} data={reference.data} visible={showReference} />
                 </>
@@ -291,9 +297,10 @@ export default function ExplorerPage() {
                   <BuildingsLayer
                     map={map}
                     id="bld-main"
-                    data={compare ? before.data : after.data}
+                    data={compare && !points ? before.data : after.data}
                     view={view}
                     opacity={0.7}
+                    visible={!points}
                   />
                   <ChangesLayer
                     map={map}
@@ -302,8 +309,9 @@ export default function ExplorerPage() {
                     filter={changeFilterExpr}
                     selectedId={selected?.id}
                     onSelect={setSelected}
+                    visible={!points}
                   />
-                  {compare && job.status === 'done' && (
+                  {compare && !points && job.status === 'done' && (
                     <CompareSwipe
                       mainMap={map}
                       leftLabel={job.stats?.before?.year ?? 'Before'}
@@ -319,6 +327,7 @@ export default function ExplorerPage() {
                   )}
                 </>
               )}
+              {points && cloud.pc && <PointCloudOverlay map={map} pc={cloud.pc} colorBy={colorBy} />}
             </>
           )}
         </MapView>
@@ -355,10 +364,12 @@ export default function ExplorerPage() {
               options={[
                 { value: '2d', label: '2D' },
                 { value: '3d', label: '3D' },
+                { value: 'points', label: 'Point Cloud' },
               ]}
+              disabled={{ points: job?.status === 'done' ? false : 'Run or load a job to see its point cloud' }}
             />
           </div>
-          {mode === 'change' && isChangeJob && job.status === 'done' && (
+          {mode === 'change' && isChangeJob && job.status === 'done' && !points && (
             <label className="pointer-events-auto flex items-center gap-2 rounded-md border bg-ink-850 px-3 py-1.5 text-xs text-muted">
               <input type="checkbox" checked={compare} onChange={() => setCompare((c) => !c)} className="accent-teal" />
               Swipe {job.stats?.before?.year} | {job.stats?.after?.year}
@@ -406,6 +417,43 @@ export default function ExplorerPage() {
         </div>
 
         {/* Right: results */}
+        {points && job?.status === 'done' && (
+          <div className="panel absolute bottom-10 left-3 z-20 w-72 space-y-3 p-3" aria-label="Point cloud">
+            <div className="flex items-center justify-between">
+              <span className="label">Point cloud</span>
+              {cloud.pc && <span className="num text-[11px] text-muted">{cloud.pc.header.count.toLocaleString()} pts</span>}
+            </div>
+            <Segmented
+              label="Colour points by"
+              value={colorBy}
+              onChange={setColorBy}
+              options={[
+                { value: 'classification', label: 'Class' },
+                { value: 'height', label: 'Height' },
+                { value: 'intensity', label: 'Intensity' },
+              ]}
+            />
+            {isChangeJob && (
+              <Segmented
+                label="Survey"
+                value={pcEpoch}
+                onChange={setPcEpoch}
+                options={[
+                  { value: 'before', label: String(job.stats?.before?.year ?? 'Before') },
+                  { value: 'after', label: String(job.stats?.after?.year ?? 'After') },
+                ]}
+              />
+            )}
+            {cloud.loading && (
+              <div className="flex items-center gap-2 text-xs text-muted">
+                <Spinner size="sm" /> Loading points
+              </div>
+            )}
+            {cloud.error && <p className="text-xs text-orange">Point cloud unavailable: {cloud.error}</p>}
+            <PointCloudLegend pc={cloud.pc} colorBy={colorBy} />
+          </div>
+        )}
+
         {job?.status === 'done' && mode === 'change' && isChangeJob && (
           <aside className="panel absolute bottom-3 right-3 top-3 z-20 w-96 overflow-y-auto p-4" aria-label="Results">
             {changes.loading && (
