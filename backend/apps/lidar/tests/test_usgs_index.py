@@ -10,6 +10,10 @@ class ParseYearTests(SimpleTestCase):
     def test_last_year_wins_for_ranges(self):
         self.assertEqual(parse_year("TX_Central_2017_2018"), 2018)
 
+    def test_las_delivery_year_is_ignored(self):
+        self.assertEqual(parse_year("USGS_LPC_TX_Central_B1_2017_LAS_2019"), 2017)
+        self.assertEqual(parse_year("USGS_LPC_IL_4County_Cook_2017_LAS_2019"), 2017)
+
     def test_work_unit_suffix(self):
         self.assertEqual(parse_year("NY_Hudson_1_D22"), 2022)
         self.assertEqual(parse_year("NY_SE4County_1_A22"), 2022)

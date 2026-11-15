@@ -16,14 +16,18 @@ EPT_SRS = "EPSG:3857"
 _FULL_YEAR = re.compile(r"(?<!\d)((?:19|20)\d{2})(?!\d)")
 # Work-unit suffixes such as NY_Hudson_1_D22 -> 2022.
 _SHORT_YEAR = re.compile(r"_[A-Z](\d{2})(?:_|$)")
+_LAS_DELIVERY = re.compile(r"_LAS_(?:19|20)\d{2}$")
 
 
 def parse_year(name: str) -> int | None:
     """Acquisition year from a 3DEP project name; None when the name has none.
 
-    If a name holds several years (e.g. 'CA_X_2018_2019'), the last one wins
-    because it is the end of the collection window.
+    'USGS_LPC_TX_Central_B1_2017_LAS_2019' ends with the year the LAS files
+    were delivered, not flown, so that suffix is ignored. If a name still holds
+    several years (e.g. 'CA_X_2018_2019'), the last one wins because it is the
+    end of the collection window.
     """
+    name = _LAS_DELIVERY.sub("", name)
     full = _FULL_YEAR.findall(name)
     if full:
         return int(full[-1])
