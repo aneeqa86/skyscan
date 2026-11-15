@@ -169,14 +169,34 @@ def local_roughness(dsm: np.ndarray, size: int = 5) -> np.ndarray:
     return np.sqrt(np.clip(ndimage.uniform_filter(resid * resid, size=size, mode="nearest"), 0, None))
 
 
+MIN_POINTS_PER_WINDOW = 3.0
+
+
+def feature_window(res: float, density_ppm2: float) -> int:
+    """Smallest odd window (in cells) expected to hold MIN_POINTS_PER_WINDOW points.
+
+    Dense surveys keep per-cell cues (sharp roof edges); sparse ones pool a
+    3x3 or 5x5 neighbourhood so spreads and shares have points to work with."""
+    for w in (1, 3, 5):
+        if density_ppm2 * (w * res) ** 2 >= MIN_POINTS_PER_WINDOW:
+            return w
+    return 5
+
+
+def window_sum(a: np.ndarray, w: int) -> np.ndarray:
+    if w <= 1:
+        return a.astype(np.float64)
+    return ndimage.uniform_filter(a.astype(np.float64), size=w, mode="constant") * (w * w)
+
+
 def build_surfaces(grid: Grid, pts: np.ndarray, ground_mask: np.ndarray) -> Surfaces:
     """pts: structured array with X, Y, Z, Classification, ReturnNumber, NumberOfReturns."""
     x, y, z = pts["X"], pts["Y"], pts["Z"]
     dtm = make_dtm(grid, x[ground_mask], y[ground_mask], z[ground_mask])
-    dsm = grid_reduce(grid, x, y, z, "max")
+    top = grid_reduce(grid, x, y, z, "max")
     # Small gaps (between scan lines) take the nearest value; large gaps
     # (water, no returns) fall back to the terrain so nDSM is 0 there.
-    dsm = fill_nearest(dsm, max_dist_cells=3)
+    dsm = fill_nearest(top, max_dist_cells=3)
     dsm = np.where(np.isnan(dsm), dtm, dsm)
     ndsm = np.clip(dsm - dtm, 0, None)
 
@@ -185,14 +205,23 @@ def build_surfaces(grid: Grid, pts: np.ndarray, ground_mask: np.ndarray) -> Surf
     nret = pts["NumberOfReturns"].astype(np.int16)
     rnum = pts["ReturnNumber"].astype(np.int16)
     multi = (nret > 1) & (rnum < nret)
+
+    # Point cues are summed over a feature window: at 4-6 pts/m² a 0.5 m cell
+    # holds one point or none, and a spread or a share computed from one point
+    # is always zero, so sparse surveys pool neighbouring cells.
+    w = feature_window(grid.res, len(pts) / (grid.nx * grid.ny * grid.cell_area))
+    ng = ~ground_mask
+    row, col, ok = grid.cell_of(x[ng], y[ng])
+    # Depth of each non-ground point below the highest point of its cell:
+    # zero on any roof, flat or pitched; large inside tree crowns.
+    depth = np.zeros(int(ng.sum()))
+    depth[ok] = top[row[ok], col[ok]] - z[ng][ok]
     with np.errstate(invalid="ignore", divide="ignore"):
-        multi_share = grid_count(grid, x, y, multi.astype(np.float64)) / count
-        ng = ~ground_mask
-        n_ng = grid_count(grid, x[ng], y[ng])
-        s1 = grid_count(grid, x[ng], y[ng], z[ng])
-        s2 = grid_count(grid, x[ng], y[ng], z[ng] ** 2)
-        var = s2 / n_ng - (s1 / n_ng) ** 2
-        z_std = np.sqrt(np.clip(var, 0, None))
+        n_all = window_sum(count, w)
+        multi_share = window_sum(grid_count(grid, x, y, multi.astype(np.float64)), w) / n_all
+        n_ng = window_sum(grid_count(grid, x[ng], y[ng]), w)
+        d2 = window_sum(grid_count(grid, x[ng], y[ng], depth**2), w)
+        z_std = np.sqrt(d2 / n_ng)
         bshare = grid_count(grid, x, y, (pts["Classification"] == BUILDING).astype(np.float64)) / count
     multi_share = np.nan_to_num(multi_share, nan=0.0)
     z_std = np.nan_to_num(z_std, nan=0.0)
