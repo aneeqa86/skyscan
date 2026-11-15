@@ -71,10 +71,10 @@ def overture_rowgroup_index(release: str) -> list[dict]:
     path = _index_path(release)
     if path.exists():
         return json.loads(path.read_text())
+    from concurrent.futures import ThreadPoolExecutor
+
     import pyarrow.parquet as pq
     from pyarrow import fs
-
-    from concurrent.futures import ThreadPoolExecutor
 
     s3 = _s3()
     base = f"{OVERTURE_BUCKET}/release/{release}/theme=buildings/type=building/"
@@ -146,7 +146,7 @@ def fetch_overture(aoi: Polygon) -> list[RefFootprint]:
         )
         t = t.filter(sel)
         heights = t.column("height").to_pylist() if "height" in cols else [None] * t.num_rows
-        for oid, g, h in zip(t.column("id").to_pylist(), t.column("geometry").to_pylist(), heights):
+        for oid, g, h in zip(t.column("id").to_pylist(), t.column("geometry").to_pylist(), heights, strict=False):
             geom = shp_wkb.loads(g)
             for poly in _polygons(geom):
                 if poly.intersects(aoi):

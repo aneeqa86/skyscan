@@ -50,7 +50,7 @@ class MaskParams:
     extra: dict = field(default_factory=dict)
 
     @classmethod
-    def from_params(cls, params: dict | None) -> "MaskParams":
+    def from_params(cls, params: dict | None) -> MaskParams:
         p = cls()
         for k, v in (params or {}).items():
             if hasattr(p, k) and k != "extra":

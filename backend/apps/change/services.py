@@ -9,7 +9,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.detection.models import Building, Job
-from apps.detection.services import JobError, _fail, _to_geos, datasets_covering, make_progress, pointcloud_path, save_buildings
+from apps.detection.services import (
+    JobError,
+    _fail,
+    _to_geos,
+    datasets_covering,
+    make_progress,
+    pointcloud_path,
+    save_buildings,
+)
 from apps.lidar.pipeline.aoi import AoiError
 from apps.lidar.pipeline.change import MIN_YEARS_APART, default_pair, run_change, survey_pairs
 from apps.lidar.pipeline.fetch import NoPointsError

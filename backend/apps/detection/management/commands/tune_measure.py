@@ -19,9 +19,9 @@ from django.core.management.base import BaseCommand, CommandError
 from shapely import wkb as shp_wkb
 from shapely.ops import transform as shp_transform
 
+from apps.cities.models import Dataset
 from apps.detection import reference, validation
 from apps.detection.services import select_dataset
-from apps.cities.models import Dataset
 from apps.lidar.pipeline.aoi import aoi_utm_epsg, validate_aoi
 from apps.lidar.pipeline.measure import (
     aoi_to_utm,

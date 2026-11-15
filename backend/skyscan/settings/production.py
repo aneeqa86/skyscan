@@ -1,9 +1,10 @@
 """
 Production settings.
 """
-from .base import *  # noqa: F401, F403
 import sentry_sdk
-from decouple import config
+from decouple import Csv, config
+
+from .base import *  # noqa: F401, F403
 
 DEBUG = False
 
@@ -38,3 +39,6 @@ LOGGING = {
     },
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# The browser-facing origin(s), for admin logins behind the proxy.
+CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())

@@ -26,7 +26,7 @@ class Grid:
     epsg: int
 
     @classmethod
-    def from_bounds(cls, xmin, ymin, xmax, ymax, res: float, epsg: int) -> "Grid":
+    def from_bounds(cls, xmin, ymin, xmax, ymax, res: float, epsg: int) -> Grid:
         """Snap bounds outward to multiples of res so two epochs share an identical grid."""
         x0 = np.floor(xmin / res) * res
         y0 = np.ceil(ymax / res) * res

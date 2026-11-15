@@ -101,7 +101,7 @@ def _boundary_pairs(labels: np.ndarray, ndsm: np.ndarray):
     key, diffs, pairs = key[order], diffs[order], pairs[order]
     starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]])
     ends = np.r_[starts[1:], key.size]
-    for s, e in zip(starts, ends):
+    for s, e in zip(starts, ends, strict=False):
         out[(int(pairs[s, 0]), int(pairs[s, 1]))] = (int(e - s), float(np.median(diffs[s:e])))
     return out
 
@@ -311,7 +311,7 @@ def compute_attributes(
     starts = np.searchsorted(lv, idx, side="left")
     ends = np.searchsorted(lv, idx, side="right")
     p90 = np.array(
-        [hv[s + int(math.floor(0.9 * (e - s - 1)))] if e > s else 0.0 for s, e in zip(starts, ends)]
+        [hv[s + int(math.floor(0.9 * (e - s - 1)))] if e > s else 0.0 for s, e in zip(starts, ends, strict=False)]
     )
     # Does the component touch the grid border (possibly cut off)?
     border = np.zeros(n + 1, dtype=bool)
