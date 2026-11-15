@@ -31,6 +31,7 @@ data/
 *.tif
 *.tiff
 !backend/apps/**/fixtures/*.laz
+!frontend/src/data/
 
 # Docker volumes
 pgdata/

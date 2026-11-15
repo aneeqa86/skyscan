@@ -38,8 +38,9 @@ def fake_reference(aoi):
     return [RefFootprint(box(a, b, c, d), 12.5, "overture", "fixture-1")], "overture", []
 
 
-def run_inline(job_id):
-    return tasks.run_job(job_id)
+def run_inline(args=None, task_id=None, **_):
+    """Stand-in for run_job.apply_async: run the task in-process."""
+    return tasks.run_job(*args)
 
 
 @override_settings(MAX_AOI_KM2_MEASURE=1.0, MAX_AOI_KM2_CHANGE=0.5, MAX_CONCURRENT_JOBS=4)
@@ -73,7 +74,7 @@ class JobLifecycleTests(TestCase):
         self.aoi_json = json.loads(self.aoi.geojson)
 
     def post_job(self, **body):
-        with mock.patch.object(tasks.run_job, "delay", side_effect=run_inline), \
+        with mock.patch.object(tasks.run_job, "apply_async", side_effect=run_inline), \
                 mock.patch("apps.detection.reference.fetch_reference", side_effect=fake_reference), \
                 self.captureOnCommitCallbacks(execute=True):
             return self.client.post("/api/jobs/", body, format="json")
@@ -202,3 +203,32 @@ class JobLifecycleTests(TestCase):
         self.assertEqual(self.client.get("/api/tiles/fixture/nope/1/0/0.mvt").status_code, 404)
         self.assertEqual(self.client.get(f"/api/tiles/coverage/{t.z}/{t.x}/{t.y}.mvt").status_code, 200)
         self.assertEqual(self.client.get("/api/schema/").status_code, 200)
+
+
+class CancelTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.client = APIClient()
+        self.aoi = ll_box(2, 2, 58, 58)
+
+    def test_cancel_queued_job_then_conflict(self):
+        job = Job.objects.create(mode="measure", aoi=self.aoi)
+        with mock.patch("skyscan.celery.app.control.revoke") as revoke:
+            r = self.client.post(f"/api/jobs/{job.id}/cancel/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual((r.json()["status"], r.json()["error"]), ("failed", "Cancelled."))
+        revoke.assert_called_once_with(str(job.id))
+        self.assertEqual(self.client.post(f"/api/jobs/{job.id}/cancel/").status_code, 409)
+
+    def test_worker_stops_at_next_checkpoint(self):
+        from apps.detection.services import cancel_job, run_measure_job
+
+        job = Job.objects.create(mode="measure", aoi=self.aoi)
+        with mock.patch("skyscan.celery.app.control.revoke"):
+            cancel_job(job)
+        run_measure_job(job.id)  # a worker picking it up anyway
+        job.refresh_from_db()
+        self.assertEqual(job.status, "failed")
+        self.assertEqual(job.error, "Cancelled.")  # not overwritten by a later failure or "done"

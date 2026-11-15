@@ -1,19 +1,25 @@
+/**
+ * Mapbox layers for the explorer, styled to the design: teal footprints with
+ * the selected building in orange (2D), a stepped height ramp (3D), dashed
+ * teal area of interest, and an orange scan line while a job runs.
+ */
 import { useEffect, useRef } from 'react'
 import { SkyscanService } from '@/services'
 import { changeColorExpr } from './changeTypes'
 
 const EMPTY = { type: 'FeatureCollection', features: [] }
 
-/** Height ramp shared by the map and the legend (metres -> colour). */
-export const HEIGHT_STOPS = [
-  [0, '#0B3D3A'],
-  [5, '#00715E'],
-  [12, '#00A88C'],
-  [25, '#00C9A7'],
-  [60, '#7FE3D2'],
-  [150, '#E6FBF7'],
+/** Stepped height ramp, 0 to 45 m (design tokens h0..h4). Shared with legends. */
+export const HEIGHT_STEPS = [
+  [0, '#2B4C7E'],
+  [9, '#2A8FA8'],
+  [18, '#00C9A7'],
+  [27, '#E8B45C'],
+  [36, '#FF6B35'],
 ]
-const heightColor = ['interpolate', ['linear'], ['coalesce', ['get', 'height_m'], 0], ...HEIGHT_STOPS.flat()]
+const heightColor = ['step', ['coalesce', ['get', 'height_m'], 0], HEIGHT_STEPS[0][1], ...HEIGHT_STEPS.slice(1).flat()]
+
+const OURS = /^(coverage|aoi|scan|reference|changes|labels|bld|buildings)/
 
 function ensureSource(map, id, spec) {
   if (!map.getSource(id)) map.addSource(id, spec)
@@ -28,15 +34,22 @@ function setVisible(map, ids, visible) {
   ids.forEach((id) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none'))
 }
 
-/** First symbol layer of the basemap: data goes below labels. */
-function beforeLabels(map) {
+function firstSymbol(map) {
   return map.getStyle().layers.find((l) => l.type === 'symbol')?.id
+}
+
+/** Show or hide every basemap layer (everything that is not ours). */
+export function setBasemapVisible(map, visible) {
+  for (const l of map.getStyle().layers) {
+    if (l.type === 'background' || OURS.test(l.id) || l.id.startsWith('gl-draw')) continue
+    map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none')
+  }
 }
 
 export function CoverageLayer({ map, visible = true }) {
   useEffect(() => {
     ensureSource(map, 'coverage', { type: 'vector', tiles: [SkyscanService.coverageTiles()], maxzoom: 12 })
-    const before = beforeLabels(map)
+    const before = firstSymbol(map)
     if (!map.getLayer('coverage-fill'))
       map.addLayer(
         {
@@ -44,7 +57,7 @@ export function CoverageLayer({ map, visible = true }) {
           type: 'fill',
           source: 'coverage',
           'source-layer': 'coverage',
-          paint: { 'fill-color': '#00C9A7', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.08, 14, 0.02] },
+          paint: { 'fill-color': '#00C9A7', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 4, 0.07, 14, 0.02] },
         },
         before
       )
@@ -55,7 +68,7 @@ export function CoverageLayer({ map, visible = true }) {
           type: 'line',
           source: 'coverage',
           'source-layer': 'coverage',
-          paint: { 'line-color': '#00C9A7', 'line-opacity': 0.35, 'line-width': 0.6 },
+          paint: { 'line-color': '#00C9A7', 'line-opacity': 0.35, 'line-width': 0.5 },
         },
         before
       )
@@ -69,6 +82,7 @@ export function CoverageLayer({ map, visible = true }) {
   return null
 }
 
+/** Area of interest of a loaded job: dashed teal outline. */
 export function AoiLayer({ map, aoi }) {
   useEffect(() => {
     const src = ensureSource(map, 'aoi', { type: 'geojson', data: EMPTY })
@@ -77,7 +91,7 @@ export function AoiLayer({ map, aoi }) {
         id: 'aoi-line',
         type: 'line',
         source: 'aoi',
-        paint: { 'line-color': '#FF6B35', 'line-width': 1.2, 'line-dasharray': [2, 1.5] },
+        paint: { 'line-color': '#00C9A7', 'line-width': 1.2, 'line-dasharray': [3.5, 2.5] },
       })
     src.setData(aoi ? { type: 'Feature', geometry: aoi, properties: {} } : EMPTY)
   }, [map, aoi])
@@ -86,29 +100,75 @@ export function AoiLayer({ map, aoi }) {
 }
 
 /**
- * Buildings as flat polygons (2D) or extruded by height (3D), coloured by height.
- * id: unique prefix (several epochs can be on the map at once).
+ * Orange scan line sweeping the area west to east with the job's progress
+ * (Explorer-Processing design). progress: 0..100.
  */
+export function ScanLineLayer({ map, aoi, progress }) {
+  useEffect(() => {
+    ensureSource(map, 'scan', { type: 'geojson', data: EMPTY })
+    ensureSource(map, 'scan-done', { type: 'geojson', data: EMPTY })
+    if (!map.getLayer('scan-done-fill'))
+      map.addLayer({ id: 'scan-done-fill', type: 'fill', source: 'scan-done', paint: { 'fill-color': '#00C9A7', 'fill-opacity': 0.06 } })
+    if (!map.getLayer('scan-line'))
+      map.addLayer({ id: 'scan-line', type: 'line', source: 'scan', paint: { 'line-color': '#FF6B35', 'line-width': 1.5 } })
+    return () => {
+      if (map.getStyle()) removeLayers(map, ['scan-line', 'scan-done-fill'])
+    }
+  }, [map])
+  useEffect(() => {
+    if (!aoi) {
+      map.getSource('scan')?.setData(EMPTY)
+      map.getSource('scan-done')?.setData(EMPTY)
+      return
+    }
+    const ring = aoi.coordinates[0]
+    const xs = ring.map((c) => c[0])
+    const ys = ring.map((c) => c[1])
+    const [w, e, s, n] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    const x = w + ((e - w) * Math.min(Math.max(progress, 0), 100)) / 100
+    map.getSource('scan')?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[x, s], [x, n]] } })
+    map.getSource('scan-done')?.setData({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'Polygon', coordinates: [[[w, s], [x, s], [x, n], [w, n], [w, s]]] },
+    })
+  }, [map, aoi, progress])
+  return null
+}
+
 /**
- * neutral: draw buildings in grey (context for Change mode, so the change
- * colours carry the meaning instead of competing with the height ramp).
+ * Buildings: flat teal footprints (2D) or extruded by height on the stepped
+ * ramp (3D). Selected in orange. neutral: grey context buildings (Change).
+ * labels: show the height at each footprint.
  */
-export function BuildingsLayer({ map, id = 'buildings', data, view, filter, selectedId, onSelect, visible = true, opacity = 0.92, neutral = false }) {
-  const ids = [`${id}-fill`, `${id}-extrusion`, `${id}-outline`, `${id}-selected`]
+export function BuildingsLayer({
+  map,
+  id = 'buildings',
+  data,
+  view,
+  filter,
+  selectedId,
+  onSelect,
+  visible = true,
+  opacity = 0.92,
+  neutral = false,
+  labels = false,
+}) {
+  const ids = [`${id}-fill`, `${id}-extrusion`, `${id}-outline`, `${id}-selected-fill`, `${id}-selected`, `${id}-labels`]
   const select = useRef(onSelect)
   select.current = onSelect
 
   useEffect(() => {
     ensureSource(map, id, { type: 'geojson', data: EMPTY, promoteId: 'id' })
-    const before = beforeLabels(map)
-    const color = neutral ? '#2A3550' : heightColor
-    map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': color, 'fill-opacity': 0.85 } }, before)
+    const before = firstSymbol(map)
+    const fill = neutral ? '#1C2940' : 'rgba(0, 201, 167, 0.16)'
+    map.addLayer({ id: `${id}-fill`, type: 'fill', source: id, paint: { 'fill-color': fill } }, before)
     map.addLayer({
       id: `${id}-extrusion`,
       type: 'fill-extrusion',
       source: id,
       paint: {
-        'fill-extrusion-color': color,
+        'fill-extrusion-color': neutral ? '#2A3550' : heightColor,
         'fill-extrusion-height': ['coalesce', ['get', 'height_m'], 0],
         'fill-extrusion-opacity': opacity,
         'fill-extrusion-vertical-gradient': true,
@@ -118,18 +178,39 @@ export function BuildingsLayer({ map, id = 'buildings', data, view, filter, sele
       id: `${id}-outline`,
       type: 'line',
       source: id,
-      paint: { 'line-color': neutral ? '#5B6880' : '#00C9A7', 'line-width': 0.5, 'line-opacity': 0.6 },
+      paint: { 'line-color': neutral ? '#5E6E87' : '#00C9A7', 'line-width': 0.8, 'line-opacity': neutral ? 0.6 : 0.9 },
+    })
+    map.addLayer({
+      id: `${id}-selected-fill`,
+      type: 'fill',
+      source: id,
+      filter: ['==', ['id'], -1],
+      paint: { 'fill-color': 'rgba(255, 107, 53, 0.28)' },
     })
     map.addLayer({
       id: `${id}-selected`,
       type: 'line',
       source: id,
       filter: ['==', ['id'], -1],
-      paint: { 'line-color': '#FF6B35', 'line-width': 2 },
+      paint: { 'line-color': '#FF6B35', 'line-width': 1.5 },
+    })
+    map.addLayer({
+      id: `${id}-labels`,
+      type: 'symbol',
+      source: id,
+      minzoom: 15,
+      layout: {
+        'text-field': ['concat', ['to-string', ['round', ['get', 'height_m']]], ' m'],
+        'text-size': 10,
+        'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+        'text-allow-overlap': false,
+        visibility: 'none',
+      },
+      paint: { 'text-color': '#E8EEF6', 'text-halo-color': '#070B14', 'text-halo-width': 1 },
     })
     const click = (e) => {
       const f = e.features?.[0]
-      if (f) select.current?.(f.properties)
+      if (f) select.current?.(f.properties, f)
     }
     const enter = () => (map.getCanvas().style.cursor = 'pointer')
     const leave = () => (map.getCanvas().style.cursor = '')
@@ -150,7 +231,7 @@ export function BuildingsLayer({ map, id = 'buildings', data, view, filter, sele
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, id])
+  }, [map, id, neutral])
 
   useEffect(() => {
     map.getSource(id)?.setData(data || EMPTY)
@@ -161,21 +242,23 @@ export function BuildingsLayer({ map, id = 'buildings', data, view, filter, sele
     setVisible(map, [`${id}-fill`], visible && !three)
     setVisible(map, [`${id}-extrusion`], visible && three)
     setVisible(map, [`${id}-outline`, `${id}-selected`], visible)
-  }, [map, id, view, visible])
+    setVisible(map, [`${id}-selected-fill`], visible && !three)
+    setVisible(map, [`${id}-labels`], visible && labels)
+  }, [map, id, view, visible, labels])
 
   useEffect(() => {
     const f = filter || true
-    for (const layer of [`${id}-fill`, `${id}-extrusion`, `${id}-outline`]) map.getLayer(layer) && map.setFilter(layer, f)
+    for (const layer of [`${id}-fill`, `${id}-extrusion`, `${id}-outline`, `${id}-labels`]) map.getLayer(layer) && map.setFilter(layer, f)
   }, [map, id, filter])
 
   useEffect(() => {
-    map.getLayer(`${id}-selected`) && map.setFilter(`${id}-selected`, ['==', ['id'], selectedId ?? -1])
+    for (const l of [`${id}-selected`, `${id}-selected-fill`]) map.getLayer(l) && map.setFilter(l, ['==', ['id'], selectedId ?? -1])
   }, [map, id, selectedId])
 
   return null
 }
 
-/** Reference footprints used for validation: matched ones faint, missed ones orange. */
+/** Reference footprints used for validation: matched faint, missed orange-light. */
 export function ReferenceLayer({ map, data, visible }) {
   useEffect(() => {
     ensureSource(map, 'reference', { type: 'geojson', data: EMPTY })
@@ -184,10 +267,9 @@ export function ReferenceLayer({ map, data, visible }) {
       type: 'line',
       source: 'reference',
       paint: {
-        'line-color': ['case', ['get', 'matched'], '#E6EDF7', '#FF6B35'],
-        'line-width': 1,
-        'line-dasharray': [1.5, 1],
-        'line-opacity': 0.9,
+        'line-color': ['case', ['get', 'matched'], '#E8EEF6', '#FFB08C'],
+        'line-width': 0.9,
+        'line-dasharray': [2, 1.5],
       },
     })
     return () => {
@@ -206,7 +288,7 @@ export function ReferenceLayer({ map, data, visible }) {
   return null
 }
 
-/** Change polygons coloured by type; extruded to the taller epoch's height in 3D. */
+/** Change polygons coloured by type; extruded to the taller survey's height in 3D. */
 export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, visible = true }) {
   const ids = ['changes-fill', 'changes-extrusion', 'changes-line', 'changes-selected']
   const select = useRef(onSelect)
@@ -214,8 +296,8 @@ export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, vi
 
   useEffect(() => {
     ensureSource(map, 'changes', { type: 'geojson', data: EMPTY, promoteId: 'id' })
-    const before = beforeLabels(map)
-    map.addLayer({ id: 'changes-fill', type: 'fill', source: 'changes', paint: { 'fill-color': changeColorExpr, 'fill-opacity': 0.55 } }, before)
+    const before = firstSymbol(map)
+    map.addLayer({ id: 'changes-fill', type: 'fill', source: 'changes', paint: { 'fill-color': changeColorExpr, 'fill-opacity': 0.5 } }, before)
     map.addLayer({
       id: 'changes-extrusion',
       type: 'fill-extrusion',
@@ -223,7 +305,7 @@ export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, vi
       paint: {
         'fill-extrusion-color': changeColorExpr,
         'fill-extrusion-height': ['max', ['coalesce', ['get', 'height_after_m'], 0], ['coalesce', ['get', 'height_before_m'], 0]],
-        'fill-extrusion-opacity': 0.75,
+        'fill-extrusion-opacity': 0.8,
       },
     })
     map.addLayer({ id: 'changes-line', type: 'line', source: 'changes', paint: { 'line-color': changeColorExpr, 'line-width': 1 } })
@@ -232,11 +314,11 @@ export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, vi
       type: 'line',
       source: 'changes',
       filter: ['==', ['id'], -1],
-      paint: { 'line-color': '#E6EDF7', 'line-width': 2.5 },
+      paint: { 'line-color': '#E8EEF6', 'line-width': 2 },
     })
     const click = (e) => {
       const f = e.features?.[0]
-      if (f) select.current?.(f.properties)
+      if (f) select.current?.(f.properties, f)
     }
     const enter = () => (map.getCanvas().style.cursor = 'pointer')
     const leave = () => (map.getCanvas().style.cursor = '')

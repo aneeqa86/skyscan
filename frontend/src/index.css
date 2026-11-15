@@ -2,18 +2,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* SKYSCAN tokens as CSS variables (for SVG, Mapbox paint and inline styles). */
 @layer base {
   :root {
     color-scheme: dark;
-    --color-bg: theme('colors.ink.900');
-    --color-surface: theme('colors.ink.800');
-    --color-text: theme('colors.fg');
-    --color-muted: theme('colors.muted');
-    --color-border: theme('colors.line');
+    --void: #070b14;
+    --panel: #0b1220;
+    --raised: #101a2c;
+    --line: #1c2940;
+    --line-strong: #2a3a57;
+    --grid: #111b30;
+    --text: #e8eef6;
+    --muted: #8c9bb3;
+    --disabled: #5e6e87;
+    --teal: #00c9a7;
+    --teal-hover: #19d9b8;
+    --teal-fill: rgba(0, 201, 167, 0.14);
+    --on-teal: #031411;
+    --orange: #ff6b35;
+    --orange-fill: rgba(255, 107, 53, 0.28);
+    --target: 44px;
   }
 
-  * {
-    border-color: var(--color-border);
+  *,
+  *::before,
+  *::after {
+    border-color: var(--line);
   }
 
   html,
@@ -23,97 +37,141 @@
   }
 
   body {
-    @apply bg-ink-900 font-sans text-fg antialiased;
+    @apply bg-void font-sans text-fg antialiased;
+  }
+
+  a {
+    @apply text-muted transition-colors hover:text-fg;
+  }
+
+  button {
+    cursor: pointer;
   }
 
   :focus-visible {
-    outline: 1px solid theme('colors.teal.DEFAULT');
+    outline: 2px solid var(--teal);
     outline-offset: 2px;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
+    .animate-pulse-ring,
+    .animate-beam,
+    .animate-skeleton,
+    .animate-spin {
+      animation: none !important;
     }
   }
 }
 
 @layer components {
+  /* Buttons: 44px targets, 3px radius, hairline borders. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex h-target items-center justify-center gap-2 whitespace-nowrap rounded-control px-4 text-sm font-medium no-underline transition-colors;
   }
-
   .btn-primary {
-    @apply btn border-teal bg-teal text-ink-950 hover:bg-teal-light;
+    @apply btn bg-teal font-semibold text-on-teal hover:bg-teal-hover hover:text-on-teal disabled:cursor-not-allowed disabled:bg-[#16223A] disabled:text-disabled;
   }
-
   .btn-secondary {
-    @apply btn border-line-strong bg-transparent text-fg hover:border-teal hover:text-teal;
+    @apply btn border-hair border-line-strong bg-raised text-fg hover:border-teal hover:text-fg disabled:cursor-not-allowed disabled:border-line disabled:bg-sunken disabled:text-disabled;
   }
-
   .btn-ghost {
-    @apply btn border-transparent text-muted hover:text-fg;
+    @apply btn bg-transparent px-3 text-muted hover:text-fg disabled:cursor-not-allowed disabled:text-disabled;
+  }
+  .btn-icon {
+    @apply inline-flex h-target w-target items-center justify-center rounded-control border-hair border-line-strong bg-panel text-fg transition-colors hover:border-teal disabled:cursor-not-allowed disabled:text-disabled;
+  }
+  .btn-toggle-on {
+    @apply border-hair border-teal bg-teal-fill text-teal;
   }
 
-  .btn-accent {
-    @apply btn border-orange bg-orange text-ink-950 hover:bg-orange-light;
+  /* Labels: mono, tracked, uppercase (the design's section labels). */
+  .label-mono {
+    @apply font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-muted;
   }
-
-  .card {
-    @apply rounded-lg border bg-ink-800 p-5;
+  .dt-mono {
+    @apply font-mono text-[10px] uppercase tracking-[0.12em] text-muted;
   }
-
-  .panel {
-    @apply rounded-lg border bg-ink-850/95 backdrop-blur;
+  .eyebrow {
+    @apply font-mono text-xs uppercase tracking-[0.16em] text-teal;
   }
-
-  .input {
-    @apply w-full rounded-md border bg-ink-700 px-3 py-2 text-sm text-fg placeholder-faint focus:border-teal focus:outline-none;
-  }
-
-  .label {
-    @apply font-mono text-[11px] uppercase tracking-[0.12em] text-muted;
-  }
-
   .num {
     @apply font-mono tabular-nums;
   }
 
+  .card {
+    @apply rounded-card border-hair border-line bg-panel;
+  }
+  .floating {
+    @apply rounded-card border-hair border-line-strong bg-panel;
+  }
+  .input {
+    @apply h-target w-full rounded-control border-hair border-line-strong bg-raised px-3 text-sm text-fg placeholder-muted focus:border-teal focus:outline-none disabled:cursor-not-allowed disabled:border-line disabled:bg-sunken disabled:text-muted;
+  }
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px];
+    @apply inline-flex items-center gap-1.5 rounded-badge border-hair border-line-strong bg-panel px-2 py-1 font-mono text-[11px] tracking-[0.1em] text-muted;
+  }
+  .skeleton-bar {
+    @apply animate-skeleton rounded-badge bg-line;
+  }
+  .grid-texture {
+    background-image: linear-gradient(to right, #131d33 0.5px, transparent 0.5px),
+      linear-gradient(to bottom, #131d33 0.5px, transparent 0.5px);
+    background-size: 48px 48px;
   }
 }
 
-/* Mapbox controls in the brand palette */
-.mapboxgl-ctrl-group {
-  background: theme('colors.ink.800') !important;
-  border: 1px solid theme('colors.line') !important;
-  box-shadow: none !important;
+/* Range slider: 2px track, 14px teal thumb (design spec). */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 44px;
+  margin: 0;
 }
-.mapboxgl-ctrl-group button + button {
-  border-top: 1px solid theme('colors.line') !important;
+input[type='range']::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--line-strong);
 }
-.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
-  filter: invert(0.85);
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid var(--void);
+  box-shadow: 0 0 0 0.5px var(--teal);
 }
+input[type='range']::-moz-range-track {
+  height: 2px;
+  background: var(--line-strong);
+}
+input[type='range']::-moz-range-progress {
+  height: 2px;
+  background: var(--teal);
+}
+input[type='range']::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid var(--void);
+}
+input[type='range']:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Mapbox chrome in the design's palette. */
 .mapboxgl-ctrl-attrib {
-  background: rgba(7, 11, 20, 0.8) !important;
-  color: theme('colors.muted') !important;
+  background: rgba(7, 11, 20, 0.85) !important;
+  color: var(--muted) !important;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 .mapboxgl-ctrl-attrib a {
-  color: theme('colors.muted') !important;
+  color: var(--muted) !important;
 }
-.mapboxgl-popup-content {
-  background: theme('colors.ink.800') !important;
-  color: theme('colors.fg') !important;
-  border: 1px solid theme('colors.line');
-  border-radius: 6px !important;
-  padding: 8px 10px !important;
-}
-.mapboxgl-popup-tip {
-  display: none;
+.mapboxgl-ctrl-logo {
+  opacity: 0.6;
 }

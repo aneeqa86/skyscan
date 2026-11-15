@@ -1,61 +1,53 @@
 /** @type {import('tailwindcss').Config} */
+// SKYSCAN design tokens (source: design package, src/styles/tokens.css).
+// Dark theme only. Teal is the accent; orange only for the active scan state,
+// the selected building and one key value per view.
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // SKYSCAN brand tokens. Dark only: near-black navy, teal, orange.
-        ink: {
-          950: '#05080F',
-          900: '#070B14', // page background
-          850: '#0A101C',
-          800: '#0D1524', // panels
-          700: '#131D31', // raised surfaces, inputs
-          600: '#1C2840',
-        },
-        line: 'rgba(148, 163, 184, 0.16)',
-        'line-strong': 'rgba(148, 163, 184, 0.32)',
-        fg: '#E6EDF7',
-        muted: '#8A97AD',
-        faint: '#5B6880',
-        teal: { DEFAULT: '#00C9A7', light: '#7FE3D2', dim: '#00876F' },
-        orange: { DEFAULT: '#FF6B35', light: '#FFB08C', dim: '#B8481F' },
-        primary: {
-          50: '#E6FBF7',
-          100: '#C0F4EA',
-          200: '#7FE3D2',
-          300: '#3DD6BC',
-          400: '#00C9A7',
-          500: '#00C9A7',
-          600: '#00A88C',
-          700: '#00876F',
-          800: '#006653',
-          900: '#004538',
-        },
+        void: '#070B14',
+        panel: '#0B1220',
+        raised: '#101A2C',
+        sunken: '#0D1627', // disabled control fill
+        mapbg: '#090F1C',
+        line: '#1C2940',
+        'line-strong': '#2A3A57',
+        gridline: '#111B30',
+        fg: '#E8EEF6',
+        muted: '#8C9BB3',
+        disabled: '#5E6E87',
+        'on-teal': '#031411',
+        teal: { DEFAULT: '#00C9A7', hover: '#19D9B8', fill: 'rgba(0, 201, 167, 0.14)', light: '#7FE3D2', dim: '#00A88C' },
+        orange: { DEFAULT: '#FF6B35', fill: 'rgba(255, 107, 53, 0.28)', light: '#FFB08C' },
+        cls: { ground: '#6F7F9C', vegetation: '#9DBF5A', building: '#00C9A7' },
+        h: { 0: '#2B4C7E', 1: '#2A8FA8', 2: '#00C9A7', 3: '#E8B45C', 4: '#FF6B35' },
+        // Aliases kept for older class names.
+        ink: { 950: '#05080F', 900: '#070B14', 850: '#0B1220', 800: '#0B1220', 700: '#101A2C', 600: '#2A3A57' },
+        faint: '#5E6E87',
+        primary: { 400: '#00C9A7', 500: '#00C9A7', 600: '#00A88C' },
       },
       fontFamily: {
+        display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
-      borderWidth: { hair: '0.5px' },
+      borderRadius: { badge: '2px', control: '3px', card: '4px' },
+      borderWidth: { hair: '0.5px', stroke: '0.75px' },
+      spacing: { target: '44px' },
+      maxWidth: { page: '1280px' },
       keyframes: {
-        pulsering: {
-          '0%': { transform: 'scale(0.4)', opacity: '0.9' },
-          '100%': { transform: 'scale(2.6)', opacity: '0' },
-        },
-        dash: { to: { strokeDashoffset: '-24' } },
-        scan: {
-          '0%': { transform: 'translateY(-10%)', opacity: '0' },
-          '15%': { opacity: '1' },
-          '85%': { opacity: '1' },
-          '100%': { transform: 'translateY(110%)', opacity: '0' },
-        },
+        'pulse-ring': { '0%': { transform: 'scale(.15)', opacity: '.9' }, '100%': { transform: 'scale(1)', opacity: '0' } },
+        'beam-flow': { to: { strokeDashoffset: '-16' } },
+        skeleton: { '0%, 100%': { opacity: '1' }, '50%': { opacity: '.4' } },
       },
       animation: {
-        pulsering: 'pulsering 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite',
-        dash: 'dash 1.2s linear infinite',
-        scan: 'scan 3.2s ease-in-out infinite',
+        'pulse-ring': 'pulse-ring 3.6s ease-out infinite',
+        beam: 'beam-flow 1.4s linear infinite',
+        skeleton: 'skeleton 1.6s ease-in-out infinite',
+        spin: 'spin 0.9s linear infinite',
       },
     },
   },

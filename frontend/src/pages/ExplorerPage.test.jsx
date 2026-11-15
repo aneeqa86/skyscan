@@ -29,6 +29,7 @@ vi.mock('@/services', () => ({
     getCities: vi.fn(),
     getSurveys: vi.fn(),
     createJob: vi.fn(),
+    cancelJob: vi.fn(),
     getJob: vi.fn(),
     getJobLayer: vi.fn(),
     exportUrl: vi.fn((id, f) => `/api/jobs/${id}/export/?format=${f}`),
@@ -61,11 +62,11 @@ const doneJob = {
   },
 }
 
-function renderExplorer(url = '/explore?mode=measure') {
+function renderExplorer(url = '/explorer?mode=measure') {
   return render(
     <MemoryRouter initialEntries={[url]}>
       <Routes>
-        <Route path="/explore" element={<ExplorerPage />} />
+        <Route path="/explorer" element={<ExplorerPage />} />
       </Routes>
     </MemoryRouter>
   )
@@ -95,24 +96,26 @@ describe('Explorer measure flow', () => {
     expect(run).toBeDisabled()
 
     await user.click(screen.getByText('test-draw'))
-    expect(await screen.findByText(/Survey: WA_KingCo_1_2021 \(2021\)/)).toBeInTheDocument()
-    expect(screen.getByText('0.022')).toBeInTheDocument() // live area readout, km²
+    expect(screen.getByText('0.022 km²')).toBeInTheDocument() // live area readout
+    expect(await screen.findByRole('option', { name: 'WA_KingCo_1_2021 · 2021' })).toBeInTheDocument()
+    await waitFor(() => expect(run).toBeEnabled())
 
     await user.click(run)
     expect(SkyscanService.createJob).toHaveBeenCalledWith({ mode: 'measure', aoi: AOI })
 
-    // Stepper reflects the job's real stage.
-    expect(await screen.findByText('Scanning')).toBeInTheDocument()
+    // The processing card reflects the job's real stage; the sidebar locks.
+    expect(await screen.findByText('Detecting buildings')).toBeInTheDocument()
     expect(screen.getByText('Streaming points from WA_KingCo_1_2021')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel processing' })).toBeInTheDocument()
 
     // Results arrive when the job is done.
     // The panel re-renders as results load, so query it fresh each time.
     const panel = () => screen.getByRole('complementary', { name: 'Results' })
     await screen.findByRole('complementary', { name: 'Results' }, { timeout: 5000 })
-    await waitFor(() => expect(within(panel()).getByText('Buildings').nextSibling).toHaveTextContent('2'))
+    await waitFor(() => expect(within(panel()).getByText('BUILDINGS').nextSibling).toHaveTextContent('2'), { timeout: 5000 })
     expect(within(panel()).getByText('Accuracy vs Overture')).toBeInTheDocument()
     expect(within(panel()).getByText('0.79')).toBeInTheDocument() // F1 from the API, not invented
-    expect(within(panel()).getByRole('link', { name: 'CSV' })).toHaveAttribute('href', '/api/jobs/job-1/export/?format=csv')
+    expect(within(panel()).getByRole('link', { name: /GeoJSON/ })).toHaveAttribute('href', '/api/jobs/job-1/export/?format=geojson')
     expect(SkyscanService.getJobLayer).toHaveBeenCalledWith('job-1', 'buildings', { epoch: 'single' })
   })
 
@@ -132,7 +135,7 @@ describe('Explorer measure flow', () => {
     })
     renderExplorer()
     await user.click(screen.getByText('test-draw'))
-    await screen.findByText(/Survey:/)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Measure buildings' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Measure buildings' }))
     expect(await screen.findByText('The server is busy with other jobs.')).toBeInTheDocument()
   })
@@ -148,8 +151,9 @@ describe('Explorer measure flow', () => {
 
   it('shows a failed job with its readable error', async () => {
     SkyscanService.getJob.mockResolvedValue({ ...doneJob, status: 'failed', error: 'No LiDAR survey covers this area.' })
-    renderExplorer('/explore?mode=measure&job=job-9')
-    expect(await screen.findByText('No LiDAR survey covers this area.')).toBeInTheDocument()
+    renderExplorer('/explorer?mode=measure&job=job-9')
+    expect(await screen.findByText('Processing failed')).toBeInTheDocument()
+    expect(screen.getByText(/No LiDAR survey covers this area\. Draw an area and run it again/)).toBeInTheDocument()
   })
 })
 
@@ -196,9 +200,9 @@ describe('Explorer change flow', () => {
       default_pair: null,
       min_years_apart: 3,
     })
-    renderExplorer('/explore?mode=change')
+    renderExplorer('/explorer?mode=change')
     await user.click(screen.getByText('test-draw'))
-    expect(await screen.findByText('Change not available here')).toBeInTheDocument()
+    expect(await screen.findByText('Change is not available here.')).toBeInTheDocument()
     expect(screen.getByText(/Only one LiDAR survey covers this whole area/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Detect change' })).toBeDisabled()
   })
@@ -225,7 +229,7 @@ describe('Explorer change flow', () => {
           : { type: 'FeatureCollection', features: [] }
       )
     )
-    renderExplorer('/explore?mode=change')
+    renderExplorer('/explorer?mode=change')
     await user.click(screen.getByText('test-draw'))
     expect(await screen.findByText('7 years apart')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Detect change' }))
@@ -235,9 +239,9 @@ describe('Explorer change flow', () => {
     const panel = () => screen.getByRole('complementary', { name: 'Results' })
     expect(await within(panel()).findByText('2013 → 2020')).toBeInTheDocument()
     // Each type shows its count with a label (never colour alone).
-    const types = within(panel()).getByRole('group', { name: 'Filter by change type' })
-    expect(within(types).getByRole('button', { name: /New\s*1/ })).toBeInTheDocument()
-    expect(within(types).getByRole('button', { name: /Demolished\s*1/ })).toBeInTheDocument()
+    expect(within(panel()).getByText('NEW').nextSibling).toHaveTextContent('1')
+    expect(within(panel()).getByText('DEMOLISHED').nextSibling).toHaveTextContent('1')
+    const types = screen.getByRole('group', { name: 'Change types' })
 
     // Clicking a change in the list opens its before/after detail.
     const list = within(panel()).getAllByRole('listitem')
@@ -248,7 +252,7 @@ describe('Explorer change flow', () => {
     expect(within(detail).getByText('none')).toBeInTheDocument()
 
     // Turning a type off filters the list.
-    await user.click(within(types).getByRole('button', { name: /New\s*1/ }))
+    await user.click(within(types).getByRole('button', { name: 'New' }))
     expect(within(panel()).getAllByRole('listitem')).toHaveLength(2)
     expect(SkyscanService.exportUrl).toHaveBeenCalledWith('job-c', 'csv', { layer: 'changes' })
   })

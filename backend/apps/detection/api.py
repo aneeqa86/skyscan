@@ -18,7 +18,7 @@ from apps.common.geojson import feature_collection, geojson_response
 from apps.lidar.pipeline.aoi import AoiError, validate_aoi
 
 from .models import Building, Job, ReferenceFootprint
-from .services import pointcloud_path
+from .services import cancel_job, pointcloud_path
 
 BUILDING_PROPS = ["epoch", "area_m2", "height_m", "max_height_m", "est_floors", "volume_m3", "point_count", "confidence"]
 CHANGE_PROPS = [
@@ -152,8 +152,19 @@ class JobViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.List
         )
         from .tasks import run_job
 
-        transaction.on_commit(lambda: run_job.delay(str(job.id)))
+        # The job id doubles as the Celery task id so a cancel can revoke it.
+        transaction.on_commit(lambda: run_job.apply_async(args=[str(job.id)], task_id=str(job.id)))
         return Response(JobSerializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+    @extend_schema(request=None, responses={200: JobSerializer, 409: OpenApiTypes.OBJECT})
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        """Cancel a queued or running job. It stops at its next progress checkpoint."""
+        job = self.get_object()
+        if not cancel_job(job):
+            return Response({"detail": "The job has already finished."}, status=status.HTTP_409_CONFLICT)
+        job.refresh_from_db()
+        return Response(JobSerializer(job).data)
 
     @extend_schema(parameters=[OpenApiParameter("epoch", OpenApiTypes.STR, enum=["single", "before", "after"])],
                    responses=OpenApiTypes.OBJECT)

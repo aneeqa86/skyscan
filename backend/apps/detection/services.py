@@ -29,6 +29,13 @@ class JobError(RuntimeError):
     """A failure whose message is safe and useful to show users."""
 
 
+class JobCancelled(RuntimeError):
+    """The job was cancelled through the API; stop without touching its status."""
+
+
+CANCELLED_MESSAGE = "Cancelled."
+
+
 def job_dir(job: Job) -> Path:
     return Path(settings.MEDIA_ROOT) / "jobs" / str(job.id)
 
@@ -39,7 +46,14 @@ def pointcloud_path(job: Job, epoch: str = "single") -> Path:
 
 def make_progress(job: Job):
     def progress(status: str, pct: int, message: str):
-        Job.objects.filter(pk=job.pk).update(status=status, progress=pct, stage_message=message[:300])
+        # A cancelled job is already marked failed: stop at the next checkpoint.
+        updated = (
+            Job.objects.filter(pk=job.pk)
+            .exclude(status__in=Job.TERMINAL)
+            .update(status=status, progress=pct, stage_message=message[:300])
+        )
+        if not updated:
+            raise JobCancelled(str(job.pk))
         log.info("job %s: %s %d%% %s", job.pk, status, pct, message)
 
     return progress
@@ -190,13 +204,15 @@ def run_measure_job(job_id) -> Job:
         stats["validation"] = val
         stats["pointcloud_bytes"] = len(result.pointcloud)
         stats["processing_seconds"] = round(time.monotonic() - t0, 1)
-        Job.objects.filter(pk=job.pk).update(
+        Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(
             status=Job.Status.DONE,
             progress=100,
             stage_message="Done",
             stats=stats,
             finished_at=timezone.now(),
         )
+    except JobCancelled:
+        log.info("job %s cancelled", job.pk)
     except (JobError, AoiError, NoPointsError) as exc:
         _fail(job, str(exc))
     except MemoryError:
@@ -209,9 +225,24 @@ def run_measure_job(job_id) -> Job:
 
 
 def _fail(job: Job, message: str):
-    Job.objects.filter(pk=job.pk).update(
+    Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(
         status=Job.Status.FAILED, error=message[:2000], stage_message="Failed", finished_at=timezone.now()
     )
 
 
-__all__ = ["run_measure_job", "select_dataset", "JobError"]
+__all__ = ["run_measure_job", "select_dataset", "JobError", "JobCancelled", "cancel_job"]
+
+
+def cancel_job(job: Job) -> bool:
+    """Mark an unfinished job cancelled. Returns False if it had already finished."""
+    updated = Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(
+        status=Job.Status.FAILED, error=CANCELLED_MESSAGE, stage_message="Cancelled", finished_at=timezone.now()
+    )
+    if updated:
+        try:
+            from skyscan.celery import app
+
+            app.control.revoke(str(job.pk))  # drops it if still queued; running jobs stop cooperatively
+        except Exception:  # broker unreachable: the cooperative check still stops it
+            log.warning("could not revoke task for job %s", job.pk)
+    return bool(updated)

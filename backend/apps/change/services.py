@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.detection.models import Building, Job
 from apps.detection.services import (
+    JobCancelled,
     JobError,
     _fail,
     _to_geos,
@@ -124,9 +125,11 @@ def run_change_job(job_id) -> Job:
         stats = dict(result.stats)
         stats["pointcloud_bytes"] = {"before": len(result.pointcloud_before), "after": len(result.pointcloud_after)}
         stats["processing_seconds"] = round(time.monotonic() - t0, 1)
-        Job.objects.filter(pk=job.pk).update(
+        Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(
             status=Job.Status.DONE, progress=100, stage_message="Done", stats=stats, finished_at=timezone.now()
         )
+    except JobCancelled:
+        log.info("change job %s cancelled", job.pk)
     except (JobError, AoiError, NoPointsError) as exc:
         _fail(job, str(exc))
     except MemoryError:

@@ -8,31 +8,32 @@ import DrawRectangle from './drawRectangle'
 export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN
 export const MAP_STYLE = 'mapbox://styles/mapbox/dark-v11'
 
+// Area of interest: dashed teal polygon with square-looking vertex handles.
 const DRAW_STYLES = [
   {
     id: 'skyscan-draw-fill',
     type: 'fill',
     filter: ['all', ['==', '$type', 'Polygon']],
-    paint: { 'fill-color': '#FF6B35', 'fill-opacity': 0.06 },
+    paint: { 'fill-color': '#00C9A7', 'fill-opacity': 0.05 },
   },
   {
     id: 'skyscan-draw-line',
     type: 'line',
     filter: ['all', ['==', '$type', 'Polygon']],
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-    paint: { 'line-color': '#FF6B35', 'line-width': 1.5, 'line-dasharray': [2, 1.5] },
+    layout: { 'line-join': 'miter' },
+    paint: { 'line-color': '#00C9A7', 'line-width': 1.2, 'line-dasharray': [3.5, 2.5] },
   },
   {
     id: 'skyscan-draw-line-active',
     type: 'line',
     filter: ['all', ['==', '$type', 'LineString']],
-    paint: { 'line-color': '#FF6B35', 'line-width': 1.5, 'line-dasharray': [2, 1.5] },
+    paint: { 'line-color': '#00C9A7', 'line-width': 1.2, 'line-dasharray': [3.5, 2.5] },
   },
   {
     id: 'skyscan-draw-vertex',
     type: 'circle',
     filter: ['all', ['==', 'meta', 'vertex'], ['==', '$type', 'Point']],
-    paint: { 'circle-radius': 4, 'circle-color': '#070B14', 'circle-stroke-color': '#FF6B35', 'circle-stroke-width': 1.5 },
+    paint: { 'circle-radius': 4.5, 'circle-color': '#070B14', 'circle-stroke-color': '#00C9A7', 'circle-stroke-width': 1.2 },
   },
 ]
 
@@ -67,13 +68,13 @@ export default function MapView({ initialView, drawMode, onAoiDrawn, onDrawClear
       setFailure(err?.message || 'webgl')
       return undefined
     }
-    m.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right')
-    m.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left')
+    // Zoom, scale and coordinates are the design's own overlays (MapChrome).
     m.addControl(
       new mapboxgl.AttributionControl({
         compact: true,
         customAttribution: 'LiDAR: USGS 3DEP, AHN · Footprints: Overture Maps, © OpenStreetMap contributors',
-      })
+      }),
+      'bottom-right'
     )
     const draw = new MapboxDraw({
       displayControlsDefault: false,
@@ -104,7 +105,11 @@ export default function MapView({ initialView, drawMode, onAoiDrawn, onDrawClear
       setMap(m)
       callbacks.current.onReady?.(m, draw)
     })
+    // Follow layout changes (panels shown or hidden), not only window resizes.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => m.resize()) : null
+    ro?.observe(container.current)
     return () => {
+      ro?.disconnect()
       setMap(null)
       m.remove()
     }
@@ -148,9 +153,9 @@ function MapFailure({ kind }) {
         ? 'Mapbox rejected the token in VITE_MAPBOX_TOKEN. Check it on account.mapbox.com.'
         : 'The map could not start. Your browser may not support WebGL.'
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink-900/90 p-6">
-      <div className="max-w-md rounded-lg border bg-ink-800 p-5 text-sm">
-        <p className="label text-orange">Map unavailable</p>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-void/90 p-6">
+      <div className="floating max-w-md p-5 text-sm">
+        <p className="label-mono text-orange">Map unavailable</p>
         <p className="mt-2 text-fg">{text}</p>
       </div>
     </div>

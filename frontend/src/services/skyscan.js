@@ -29,6 +29,11 @@ const SkyscanService = {
     return data
   },
 
+  async cancelJob(id) {
+    const { data } = await api.post(`/jobs/${id}/cancel/`)
+    return data
+  },
+
   async getJob(id) {
     const { data } = await api.get(`/jobs/${id}/`)
     return data

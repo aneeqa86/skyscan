@@ -1,138 +1,131 @@
 import { GITHUB_URL } from '@/components/layout/Navbar'
+import { Svg } from '@/components/ui/kit'
 
 const METHOD_URL = `${GITHUB_URL}/blob/main/docs/METHOD.md`
 const SOURCES_URL = `${GITHUB_URL}/blob/main/docs/DATA_SOURCES.md`
 
-const SOURCES = [
-  {
-    name: 'USGS 3D Elevation Program (3DEP)',
-    use: 'Point clouds for Measure and Change (Entwine Point Tiles on AWS Open Data)',
-    license: 'Public domain (U.S. Government work)',
-    attribution: 'USGS 3D Elevation Program',
-  },
-  {
-    name: 'Actueel Hoogtebestand Nederland (AHN2-AHN5)',
-    use: 'Point clouds for the Netherlands, including repeat surveys for Change (LAZ tiles via the GeoTiles mirror, TU Delft)',
-    license: 'CC0 1.0 (public domain)',
-    attribution: 'Actueel Hoogtebestand Nederland (AHN)',
-  },
-  {
-    name: 'Overture Maps, buildings theme',
-    use: 'Reference footprints for validation',
-    license: 'ODbL',
-    attribution: 'Overture Maps Foundation, © OpenStreetMap contributors',
-  },
-  {
-    name: 'OpenStreetMap',
-    use: 'Fallback reference footprints and heights',
-    license: 'ODbL',
-    attribution: '© OpenStreetMap contributors',
-  },
-  {
-    name: 'Mapbox',
-    use: 'Basemap and map rendering',
-    license: 'Mapbox Terms of Service',
-    attribution: '© Mapbox',
-  },
+const PIPELINE = [
+  ['Fetch points', 'Stream only the points inside the drawn area: USGS 3DEP from Entwine Point Tiles, AHN from cached LAZ tiles. Noise and outliers are dropped.'],
+  ['Ground filter', 'Use the survey’s ground class, or find the ground with SMRF, then interpolate a bare-earth terrain model.'],
+  ['nDSM', 'Subtract the terrain model from the surface model to get height above ground for every 0.5 m cell.'],
+  ['Separate roofs from trees', 'Trees let laser pulses through and are rough; roofs are planar. Touching buildings are split where roof heights jump.'],
+  ['Vectorize and validate', 'Trace footprints with height, floors and volume, then score them against Overture Maps or OpenStreetMap.'],
+  ['Compare surveys', 'For Change, align two surveys on stable ground, difference them and classify each change.'],
 ]
 
 const STACK = [
-  ['Frontend', 'React, Vite, Tailwind CSS, Mapbox GL JS, mapbox-gl-draw, deck.gl, Recharts'],
-  ['API', 'Django, Django REST Framework, GeoDjango, drf-spectacular'],
-  ['Database', 'PostgreSQL with PostGIS (vector tiles with ST_AsMVT)'],
-  ['Jobs', 'Celery and Redis'],
-  ['Processing', 'PDAL, GDAL, rasterio, NumPy, SciPy, scikit-image, Shapely, pyproj'],
+  ['Interface', ['React', 'Vite', 'Tailwind CSS', 'Mapbox GL JS', 'mapbox-gl-draw', 'deck.gl']],
+  ['Processing', ['Python', 'PDAL', 'GDAL', 'rasterio', 'NumPy', 'SciPy', 'scikit-image', 'Shapely', 'Celery']],
+  ['API and data', ['Django REST Framework', 'GeoDjango', 'PostgreSQL + PostGIS', 'Redis']],
+  ['Formats', ['EPT', 'LAZ', 'GeoJSON', 'MVT', 'CSV']],
 ]
+
+function Badge({ children }) {
+  return <li className="rounded-badge border-hair border-line-strong px-2 py-1 font-mono text-xs text-fg">{children}</li>
+}
 
 export default function AboutPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-14 sm:px-6">
-      <p className="label text-orange">About</p>
-      <h1 className="mt-3 text-3xl font-semibold text-fg">Building heights and change, straight from LiDAR</h1>
-      <p className="mt-4 text-muted">
-        Open building footprint maps are good at outlines but patchy on heights, and they rarely say what changed.
-        Airborne LiDAR measures every roof directly. SKYSCAN turns those raw point clouds into measured buildings:
-        footprints with height, floors and volume, checked against independent maps, and compares two surveys to find
-        new buildings, demolitions, added floors and extensions.
-      </p>
-
-      <h2 className="label mt-12">The method in brief</h2>
-      <ol className="mt-4 space-y-3 text-sm text-muted">
-        <li>
-          <span className="text-fg">Read.</span> Points stream from the newest survey covering your area, cropped to
-          it. Noise and outliers are removed and the ground is found.
-        </li>
-        <li>
-          <span className="text-fg">Model.</span> A terrain model and a surface model give the height of everything
-          above the ground on a 0.5 m grid.
-        </li>
-        <li>
-          <span className="text-fg">Separate.</span> Roofs are told apart from trees by how the laser returns behave:
-          trees let pulses through and are rough, roofs are planar. Touching buildings are split where roof heights
-          jump.
-        </li>
-        <li>
-          <span className="text-fg">Measure and check.</span> Each footprint gets its 90th-percentile height, floors
-          and volume, and the result is scored against Overture Maps or OpenStreetMap footprints.
-        </li>
-        <li>
-          <span className="text-fg">Compare.</span> For change, two surveys are aligned on stable ground, differenced
-          and every change is classified.
-        </li>
-      </ol>
-      <p className="mt-4 text-sm">
-        <a href={METHOD_URL} className="text-teal hover:underline" target="_blank" rel="noreferrer">
-          Read the full method, accuracy results and limits (METHOD.md)
-        </a>
-      </p>
-
-      <h2 className="label mt-12">Data sources and attribution</h2>
-      <div className="mt-4 overflow-x-auto rounded-lg border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-ink-800 text-muted">
-            <tr>
-              <th className="px-4 py-2 font-medium">Source</th>
-              <th className="px-4 py-2 font-medium">Used for</th>
-              <th className="px-4 py-2 font-medium">License</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SOURCES.map((s) => (
-              <tr key={s.name} className="border-t">
-                <td className="px-4 py-3 text-fg">
-                  {s.name}
-                  <div className="text-xs text-muted">{s.attribution}</div>
-                </td>
-                <td className="px-4 py-3 text-muted">{s.use}</td>
-                <td className="px-4 py-3 text-muted">{s.license}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="mx-auto max-w-page px-4 pb-24 pt-14 sm:px-8">
+      <div className="flex max-w-[760px] flex-col gap-3">
+        <div className="eyebrow">ABOUT</div>
+        <h1 className="m-0 font-display text-[clamp(32px,4vw,52px)] font-medium leading-[1.05] tracking-[-0.025em]">
+          Reading cities from the air, one rooftop at a time
+        </h1>
+        <p className="m-0 text-[17px] leading-relaxed text-muted">
+          SKYSCAN is a personal portfolio project. It takes free aerial LiDAR from national mapping agencies and turns
+          it into measured buildings you can inspect in 2D, in extruded 3D and as the raw point cloud, and it finds what
+          changed between two surveys.
+        </p>
       </div>
-      <p className="mt-3 text-sm">
-        <a href={SOURCES_URL} className="text-teal hover:underline" target="_blank" rel="noreferrer">
-          All sources, including European LiDAR portals (DATA_SOURCES.md)
-        </a>
-      </p>
 
-      <h2 className="label mt-12">Tech stack</h2>
-      <dl className="mt-4 divide-y rounded-lg border">
-        {STACK.map(([k, v]) => (
-          <div key={k} className="grid gap-1 px-4 py-3 text-sm sm:grid-cols-[140px_1fr]">
-            <dt className="text-muted">{k}</dt>
-            <dd className="text-fg">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      <div className="mt-14 flex flex-wrap gap-12">
+        <div className="flex min-w-0 flex-[1_1_520px] flex-col gap-12">
+          <section>
+            <h2 className="m-0 font-display text-2xl font-medium">Why I built it</h2>
+            <p className="mt-4 max-w-[68ch] text-[15px] leading-relaxed text-muted">
+              Governments publish excellent LiDAR for free, but the raw files are hard to look at and harder to trust.
+              Open footprint maps have outlines but rarely heights, and they do not say what changed. I wanted a tool that
+              answers plain questions in a minute: where are the buildings, how tall and how large are they, which points
+              prove it, and what is new since the last survey.
+            </p>
+            <p className="mt-4 max-w-[68ch] text-[15px] leading-relaxed text-muted">
+              Showing every result three ways is the point. The footprint map is for analysis, the extruded view is for
+              intuition, and the point cloud is for evidence.
+            </p>
+          </section>
 
-      <p className="mt-12 text-sm text-muted">
-        SKYSCAN is a personal project by Aneeqa. Source code on{' '}
-        <a href={GITHUB_URL} className="text-teal hover:underline" target="_blank" rel="noreferrer">
-          GitHub
-        </a>
-        .
-      </p>
+          <section>
+            <h2 className="m-0 font-display text-2xl font-medium">The pipeline</h2>
+            <ol className="m-0 mt-4 list-none border-t-hair border-line p-0">
+              {PIPELINE.map(([title, text], i) => (
+                <li key={title} className="flex gap-5 border-b-hair border-line py-4">
+                  <span className="w-6 shrink-0 font-mono text-[13px] text-teal">{String(i + 1).padStart(2, '0')}</span>
+                  <div>
+                    <h3 className="m-0 text-[15px] font-medium">{title}</h3>
+                    <p className="mt-1 max-w-[64ch] text-sm leading-relaxed text-muted">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <a href={METHOD_URL} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 py-3 text-sm text-teal hover:text-teal-hover">
+              Full method, accuracy results and limits (METHOD.md)
+              <Svg name="arrow" size={14} />
+            </a>
+          </section>
+
+          <section>
+            <h2 className="m-0 font-display text-2xl font-medium">Limits and next steps</h2>
+            <p className="mt-4 max-w-[68ch] text-[15px] leading-relaxed text-muted">
+              Detection is height-based. Dense evergreen trees, cranes and parked trains can pass the tests, and in dense
+              city cores the reference maps split blocks into one building per lot while LiDAR sees one roof, so footprint
+              scores there are low even when heights are right. Heights depend on when a survey was flown, and Change mode
+              compares surveys of different density and season.
+            </p>
+            <p className="mt-4 max-w-[68ch] text-[15px] leading-relaxed text-muted">
+              Next: roof-type classification, an accuracy reference for Change mode, and more national datasets.
+            </p>
+          </section>
+        </div>
+
+        <aside className="flex min-w-0 flex-[1_1_300px] flex-col gap-5 md:max-w-[360px]">
+          <section className="card flex flex-col gap-3 p-5">
+            <h2 className="label-mono">Source code</h2>
+            <div className="font-mono text-[13px] text-fg">github.com/aneeqa86/skyscan</div>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="btn-primary self-start">
+              View on GitHub
+              <Svg name="arrow" strokeWidth={1.5} />
+            </a>
+          </section>
+
+          <section className="card flex flex-col gap-4 p-5">
+            <h2 className="label-mono">Tech stack</h2>
+            {STACK.map(([group, items]) => (
+              <div key={group}>
+                <h3 className="m-0 mb-2 text-[13px] font-medium">{group}</h3>
+                <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+                  {items.map((it) => (
+                    <Badge key={it}>{it}</Badge>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+
+          <section className="card flex flex-col gap-3 p-5">
+            <h2 className="label-mono">Data attribution</h2>
+            <p className="m-0 text-[13px] leading-relaxed text-muted">
+              LiDAR: USGS 3D Elevation Program (public domain) and Actueel Hoogtebestand Nederland (CC0), the latter via the
+              GeoTiles mirror (TU Delft). Reference footprints: Overture Maps Foundation and © OpenStreetMap contributors
+              (ODbL). Basemap © Mapbox.
+            </p>
+            <a href={SOURCES_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 py-2 text-[13px] text-teal hover:text-teal-hover">
+              All sources and licences (DATA_SOURCES.md)
+              <Svg name="arrow" size={14} />
+            </a>
+          </section>
+        </aside>
+      </div>
     </div>
   )
 }
