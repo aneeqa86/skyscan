@@ -17,7 +17,8 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER . /app
 RUN mkdir -p /data/media /data/work /data/cache && chown -R $MAMBA_USER:$MAMBA_USER /data
 
 USER $MAMBA_USER
-ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH=/opt/conda/bin:$PATH \
+    PROJ_DATA=/opt/conda/share/proj GDAL_DATA=/opt/conda/share/gdal
 EXPOSE 8000
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
 CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:8000"]

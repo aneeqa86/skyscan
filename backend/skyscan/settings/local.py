@@ -18,5 +18,11 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "root": {"handlers": ["console"], "level": "DEBUG"},
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django.db.backends": {"level": "INFO"},
+        "rasterio": {"level": "WARNING"},
+        "urllib3": {"level": "WARNING"},
+        "botocore": {"level": "WARNING"},
+    },
 }
