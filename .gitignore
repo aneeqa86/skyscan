@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build output
+dist/
+build/
+frontend/coverage/
+
+# Data, caches and job outputs (never commit LiDAR, rasters or results)
+backend/media/
+backend/work/
+backend/cache/
+data/
+*.laz
+*.las
+*.tif
+*.tiff
+!backend/apps/**/fixtures/*.laz
+
+# Docker volumes
+pgdata/
+docker-data/
+
+# Editor / OS
+.vscode/settings.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

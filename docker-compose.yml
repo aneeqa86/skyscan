@@ -1,0 +1,65 @@
+# Local development stack. The frontend runs natively: cd frontend && npm run dev
+name: skyscan
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${DB_NAME:-skyscan}
+      POSTGRES_USER: ${DB_USER:-skyscan}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-skyscan}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-skyscan} -d ${DB_NAME:-skyscan}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: ./backend
+    env_file: ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - skyscan_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/api/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    build: ./backend
+    env_file: ./backend/.env
+    command: celery -A skyscan worker --loglevel=info --concurrency=${WORKER_CONCURRENCY:-2}
+    volumes:
+      - ./backend:/app
+      - skyscan_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  skyscan_data:
