@@ -106,11 +106,13 @@ describe('Explorer measure flow', () => {
     expect(screen.getByText('Streaming points from WA_KingCo_1_2021')).toBeInTheDocument()
 
     // Results arrive when the job is done.
-    const panel = await screen.findByRole('complementary', { name: 'Results' }, { timeout: 5000 })
-    await waitFor(() => expect(within(panel).getByText('Buildings').nextSibling).toHaveTextContent('2'))
-    expect(within(panel).getByText('Accuracy vs Overture')).toBeInTheDocument()
-    expect(within(panel).getByText('0.79')).toBeInTheDocument() // F1 from the API, not invented
-    expect(within(panel).getByRole('link', { name: 'CSV' })).toHaveAttribute('href', '/api/jobs/job-1/export/?format=csv')
+    // The panel re-renders as results load, so query it fresh each time.
+    const panel = () => screen.getByRole('complementary', { name: 'Results' })
+    await screen.findByRole('complementary', { name: 'Results' }, { timeout: 5000 })
+    await waitFor(() => expect(within(panel()).getByText('Buildings').nextSibling).toHaveTextContent('2'))
+    expect(within(panel()).getByText('Accuracy vs Overture')).toBeInTheDocument()
+    expect(within(panel()).getByText('0.79')).toBeInTheDocument() // F1 from the API, not invented
+    expect(within(panel()).getByRole('link', { name: 'CSV' })).toHaveAttribute('href', '/api/jobs/job-1/export/?format=csv')
     expect(SkyscanService.getJobLayer).toHaveBeenCalledWith('job-1', 'buildings', { epoch: 'single' })
   })
 
