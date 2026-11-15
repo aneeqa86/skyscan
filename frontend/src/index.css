@@ -4,57 +4,116 @@
 
 @layer base {
   :root {
-    --color-bg: theme('colors.white');
-    --color-surface: theme('colors.gray.50');
-    --color-text: theme('colors.gray.900');
-    --color-muted: theme('colors.gray.500');
-    --color-border: theme('colors.gray.200');
-  }
-
-  .dark {
-    --color-bg: theme('colors.gray.950');
-    --color-surface: theme('colors.gray.900');
-    --color-text: theme('colors.gray.50');
-    --color-muted: theme('colors.gray.400');
-    --color-border: theme('colors.gray.800');
+    color-scheme: dark;
+    --color-bg: theme('colors.ink.900');
+    --color-surface: theme('colors.ink.800');
+    --color-text: theme('colors.fg');
+    --color-muted: theme('colors.muted');
+    --color-border: theme('colors.line');
   }
 
   * {
-    @apply border-border;
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
   }
 
   body {
-    @apply bg-white text-gray-900 antialiased;
-    background-color: var(--color-bg);
-    color: var(--color-text);
+    @apply bg-ink-900 font-sans text-fg antialiased;
+  }
+
+  :focus-visible {
+    outline: 1px solid theme('colors.teal.DEFAULT');
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
 @layer components {
-  /* Reusable button base — extend in Button.jsx */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-40;
   }
 
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800;
+    @apply btn border-teal bg-teal text-ink-950 hover:bg-teal-light;
   }
 
   .btn-secondary {
-    @apply btn bg-gray-100 text-gray-900 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700;
+    @apply btn border-line-strong bg-transparent text-fg hover:border-teal hover:text-teal;
   }
 
   .btn-ghost {
-    @apply btn text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800;
+    @apply btn border-transparent text-muted hover:text-fg;
   }
 
-  /* Card base */
+  .btn-accent {
+    @apply btn border-orange bg-orange text-ink-950 hover:bg-orange-light;
+  }
+
   .card {
-    @apply rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900;
+    @apply rounded-lg border bg-ink-800 p-5;
   }
 
-  /* Input base */
-  .input {
-    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder-gray-500;
+  .panel {
+    @apply rounded-lg border bg-ink-850/95 backdrop-blur;
   }
+
+  .input {
+    @apply w-full rounded-md border bg-ink-700 px-3 py-2 text-sm text-fg placeholder-faint focus:border-teal focus:outline-none;
+  }
+
+  .label {
+    @apply font-mono text-[11px] uppercase tracking-[0.12em] text-muted;
+  }
+
+  .num {
+    @apply font-mono tabular-nums;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px];
+  }
+}
+
+/* Mapbox controls in the brand palette */
+.mapboxgl-ctrl-group {
+  background: theme('colors.ink.800') !important;
+  border: 1px solid theme('colors.line') !important;
+  box-shadow: none !important;
+}
+.mapboxgl-ctrl-group button + button {
+  border-top: 1px solid theme('colors.line') !important;
+}
+.mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+  filter: invert(0.85);
+}
+.mapboxgl-ctrl-attrib {
+  background: rgba(7, 11, 20, 0.8) !important;
+  color: theme('colors.muted') !important;
+}
+.mapboxgl-ctrl-attrib a {
+  color: theme('colors.muted') !important;
+}
+.mapboxgl-popup-content {
+  background: theme('colors.ink.800') !important;
+  color: theme('colors.fg') !important;
+  border: 1px solid theme('colors.line');
+  border-radius: 6px !important;
+  padding: 8px 10px !important;
+}
+.mapboxgl-popup-tip {
+  display: none;
 }

@@ -1,10 +1,10 @@
 import { Outlet } from 'react-router-dom'
-import Navbar from './Navbar'
 import Footer from './Footer'
+import Navbar from './Navbar'
 
 export default function MainLayout() {
   return (
-    <div className="flex min-h-screen flex-col bg-white dark:bg-gray-950">
+    <div className="flex min-h-screen flex-col bg-ink-900">
       <Navbar />
       <main className="flex-1">
         <Outlet />

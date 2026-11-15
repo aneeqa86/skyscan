@@ -1,26 +1,33 @@
-import { Routes, Route } from 'react-router-dom'
-import { AuthProvider } from '@/context/AuthContext'
-import { ThemeProvider } from '@/context/ThemeContext'
+import { lazy, Suspense } from 'react'
+import { Route, Routes } from 'react-router-dom'
+import { PageSpinner } from '@/components/ui'
 import MainLayout from '@/components/layout/MainLayout'
-import HomePage from '@/pages/HomePage'
+import { ThemeProvider } from '@/context/ThemeContext'
 import AboutPage from '@/pages/AboutPage'
+import LandingPage from '@/pages/LandingPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+
+// The explorer pulls in Mapbox GL and deck.gl; load it only when needed.
+const ExplorerPage = lazy(() => import('@/pages/ExplorerPage'))
 
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <Routes>
-          {/* All routes inside MainLayout share the Navbar + Footer */}
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/about" element={<AboutPage />} />
-          </Route>
-
-          {/* Catch-all 404 */}
+      <Routes>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/about" element={<AboutPage />} />
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </AuthProvider>
+        </Route>
+        <Route
+          path="/explore"
+          element={
+            <Suspense fallback={<PageSpinner />}>
+              <ExplorerPage />
+            </Suspense>
+          }
+        />
+      </Routes>
     </ThemeProvider>
   )
 }
