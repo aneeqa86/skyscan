@@ -156,6 +156,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # /export/?format=csv is ours; DRF would otherwise read ?format= as a renderer name.
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 # ---------------------------------------------------------------------------
