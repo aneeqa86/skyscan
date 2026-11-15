@@ -158,6 +158,7 @@ def fetch_epoch(source, dataset, aoi4326, aoi_utm: Polygon, grid: Grid, progress
     ring = [inv.transform(x, y) for x, y in [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax), (xmin, ymin)]]
     fetch_area = GPolygon(ring, srid=4326)
     progress("fetching", pct[0], f"Streaming points from {dataset.name}")
+    source.prepare(fetch_area, dataset, lambda msg: progress("fetching", pct[0], msg))
     pts = fetch_points(
         source.read(fetch_area, dataset),
         grid.epsg,

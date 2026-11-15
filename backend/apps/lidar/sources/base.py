@@ -14,8 +14,17 @@ class LidarSource(ABC):
         """Return a queryset/list of Dataset rows whose coverage intersects the AOI (EPSG:4326)."""
 
     @abstractmethod
-    def read(self, aoi: Polygon, dataset) -> dict:
-        """Return a PDAL reader stage (a dict) that streams points for the AOI only."""
+    def read(self, aoi: Polygon, dataset) -> dict | list[dict]:
+        """Return the PDAL reader stage (a dict) that streams points for the AOI only.
+
+        Tile-based sources may return a list of stages instead (several
+        readers, a merge and a crop) that together produce the AOI's points."""
+
+    def prepare(self, aoi: Polygon, dataset, progress=None) -> None:
+        """Optional: fetch or cache anything read() needs (e.g. tile downloads).
+
+        progress(message) may be called to report what is happening."""
+        return None
 
 
 _REGISTRY: dict[str, LidarSource] = {}

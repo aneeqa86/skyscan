@@ -11,6 +11,12 @@ const SOURCES = [
     attribution: 'USGS 3D Elevation Program',
   },
   {
+    name: 'Actueel Hoogtebestand Nederland (AHN2-AHN5)',
+    use: 'Point clouds for the Netherlands, including repeat surveys for Change (LAZ tiles via the GeoTiles mirror, TU Delft)',
+    license: 'CC0 1.0 (public domain)',
+    attribution: 'Actueel Hoogtebestand Nederland (AHN)',
+  },
+  {
     name: 'Overture Maps, buildings theme',
     use: 'Reference footprints for validation',
     license: 'ODbL',

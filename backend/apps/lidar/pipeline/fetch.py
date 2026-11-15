@@ -59,15 +59,22 @@ def fetch_points(
 
     import pdal
 
-    reader = dict(reader_stage)
-    if reader.get("type") == "readers.ept" and density_ppm2 and density_ppm2 > cap_above_ppm2:
-        scale = 1 / math.cos(math.radians(lat)) if lat is not None else 1.0
-        reader.setdefault("resolution", cap_spacing_m * scale)
+    stages = [dict(s) for s in reader_stage] if isinstance(reader_stage, list) else [dict(reader_stage)]
+    dense = bool(density_ppm2 and density_ppm2 > cap_above_ppm2)
+    reader = stages[0]
+    if reader.get("type") == "readers.ept":
+        if dense:
+            scale = 1 / math.cos(math.radians(lat)) if lat is not None else 1.0
+            reader.setdefault("resolution", cap_spacing_m * scale)
+    elif dense:
+        # Tile files have no octree to read coarser levels from: keep every
+        # Nth point instead (about 15 pts/m², the same target as for EPT).
+        stages.append({"type": "filters.decimation", "step": max(2, math.ceil(density_ppm2 / 15))})
     # One expression: filters.range ORs comma-separated ranges on one dimension,
     # so "not 7, not 18" written as two ranges would let every point through.
     not_noise = " && ".join(f"Classification != {c}" for c in NOISE)
     spec = [
-        reader,
+        *stages,
         {"type": "filters.expression", "expression": not_noise},
         {"type": "filters.reprojection", "out_srs": f"EPSG:{utm_epsg}"},
         {"type": "filters.outlier", "method": "statistical", "mean_k": 8, "multiplier": 2.5},

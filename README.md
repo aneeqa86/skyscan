@@ -7,7 +7,8 @@
 **Every rooftop has a story. We read them all.**
 Measured building heights and change detection for any area, from raw LiDAR.
 
-SKYSCAN does two things with free airborne LiDAR from the USGS 3D Elevation Program:
+SKYSCAN does two things with free airborne LiDAR from the USGS 3D Elevation Program (and the Dutch
+national height model, AHN):
 
 1. **Measure.** Draw an area of up to 1 km² and get building footprints with measured height, floors and
    volume in about a minute, with accuracy numbers you can check against independent maps.
@@ -122,6 +123,12 @@ docker compose exec api python manage.py precompute_city midtown-manhattan
 docker compose exec api python manage.py precompute_change denver-union-station
 ```
 
+Optional, for the Netherlands (downloads the AHN tile index; tiles are fetched per job and cached):
+
+```bash
+docker compose exec api python manage.py load_ahn_index
+```
+
 Then the frontend:
 
 ```bash
@@ -157,7 +164,7 @@ Skyscan/
   backend/
     apps/
       cities/          showcase cities, datasets, coverage, precompute commands
-      lidar/           source adapters (USGS EPT, local LAS), processing pipeline
+      lidar/           source adapters (USGS EPT, AHN tiles, local LAS), processing pipeline
       detection/       measure jobs, buildings, validation, exports, jobs API
       change/          change jobs and change features
       tiles/           MVT endpoints
@@ -171,6 +178,7 @@ Skyscan/
 ## Data and attribution
 
 - LiDAR: **USGS 3D Elevation Program (3DEP)**, public domain, via the AWS Open Data `usgs-lidar-public` bucket.
+- LiDAR (Netherlands): **Actueel Hoogtebestand Nederland (AHN2-AHN5)**, CC0, via the GeoTiles mirror (TU Delft).
 - Reference footprints: **Overture Maps Foundation** and **© OpenStreetMap contributors** (ODbL).
 - Basemap: **© Mapbox**.
 

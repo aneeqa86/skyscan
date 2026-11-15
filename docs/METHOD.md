@@ -218,6 +218,34 @@ Two areas were checked by eye against the known history of each place
 Change detection has no independent reference in this version, so no accuracy
 numbers are reported for it.
 
+## 3b. The Netherlands (AHN)
+
+The same pipeline runs on the Dutch national height model (AHN2-AHN5), read
+from cached LAZ tiles instead of streamed EPT (see
+[DATA_SOURCES.md](DATA_SOURCES.md)). Results computed on 2026-11-15 in
+Amsterdam, validated against Overture Maps:
+
+| Area | Survey | Detected / reference | Precision | Recall | F1 | Mean IoU | Height MAE (n) |
+|---|---|---|---|---|---|---|---|
+| Buitenveldert: post-war flats and row houses | AHN5 | 103 / 129 | 0.34 | 0.27 | 0.30 | 0.82 | 2.2 m (32) |
+| Zuidas: office towers and complexes | AHN5 | 141 / 30 | 0.07 | 0.33 | 0.12 | 0.75 | 2.4 m (10) |
+
+Matched outlines fit closely and heights are within about 2 m, but footprint
+counts disagree for the same reason as in dense US cores: the Dutch reference
+(largely from the national BAG register) maps every row house and every wing
+of an office complex separately, while LiDAR sees one continuous roof.
+
+Change, Zuidas, AHN3 (about 2017) against AHN5 (about 2024): 72 changes, 42 new
+and 26 demolished, after aligning the surveys by 0.002 m (ground noise 0.14 m).
+New residential blocks and a demolished complex replaced next door stand out.
+The result also contains long, thin "new" strips along the motorway and railway
+corridor and a cluster of irregular, tree-like shapes; these are most likely
+vehicles, noise barriers or trees rather than buildings, and were not verified.
+
+Each AHN job decompresses whole 1 x 1.25 km tiles (30-50 million points) to
+crop them, so a cached 0.3 km² job takes about 3-4 minutes; the first job on
+new tiles adds the download (about 1-2 minutes per tile).
+
 ## 4. Limits
 
 - Heights are relative to the ground model. On steep slopes the downhill side

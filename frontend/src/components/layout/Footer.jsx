@@ -6,7 +6,7 @@ export default function Footer() {
     <footer className="border-t py-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <p>
-          SKYSCAN is a personal project by Aneeqa. LiDAR: USGS 3D Elevation Program (public domain). Reference
+          SKYSCAN is a personal project by Aneeqa. LiDAR: USGS 3D Elevation Program and Actueel Hoogtebestand Nederland (both public domain). Reference
           footprints: Overture Maps, © OpenStreetMap contributors (ODbL). Basemap © Mapbox.
         </p>
         <nav className="flex shrink-0 gap-5" aria-label="Footer">
