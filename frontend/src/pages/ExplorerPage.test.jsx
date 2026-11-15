@@ -152,3 +152,104 @@ describe('Explorer measure flow', () => {
     expect(await screen.findByText('No LiDAR survey covers this area.')).toBeInTheDocument()
   })
 })
+
+const change = (id, type, hb, ha, area) => ({
+  type: 'Feature',
+  id,
+  geometry: AOI,
+  properties: {
+    id, change_type: type, height_before_m: hb, height_after_m: ha,
+    delta_height_m: (ha ?? 0) - (hb ?? 0), area_m2: area, volume_delta_m3: ((ha ?? 0) - (hb ?? 0)) * area, confidence: 0.9,
+  },
+})
+
+const changeJob = {
+  id: 'job-c',
+  mode: 'change',
+  status: 'done',
+  progress: 100,
+  aoi: AOI,
+  dataset: { name: 'CO_DRCOG_2_2020', acquisition_year: 2020 },
+  dataset_before: { name: 'CO_2013', acquisition_year: 2013 },
+  stats: {
+    before: { year: 2013, dataset: 'CO_2013', observed_density_ppm2: 4.9 },
+    after: { year: 2020, dataset: 'CO_DRCOG_2_2020', observed_density_ppm2: 4.5 },
+    vertical_offset_m: -0.045,
+    vertical_noise_m: 0.044,
+  },
+}
+
+describe('Explorer change flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    SkyscanService.getCities.mockResolvedValue([])
+  })
+
+  it('explains why change is unavailable where only one survey exists', async () => {
+    const user = userEvent.setup()
+    SkyscanService.getSurveys.mockResolvedValue({
+      count: 1,
+      results: [{ id: 1, name: 'WA_KingCo_1_2021', acquisition_year: 2021, covers_whole_area: true }],
+      years: [2021],
+      change_possible: false,
+      change_reason: 'Only one LiDAR survey covers this whole area, so there is nothing to compare.',
+      default_pair: null,
+      min_years_apart: 3,
+    })
+    renderExplorer('/explore?mode=change')
+    await user.click(screen.getByText('test-draw'))
+    expect(await screen.findByText('Change not available here')).toBeInTheDocument()
+    expect(screen.getByText(/Only one LiDAR survey covers this whole area/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Detect change' })).toBeDisabled()
+  })
+
+  it('runs with the chosen survey pair and lists classified changes', async () => {
+    const user = userEvent.setup()
+    SkyscanService.getSurveys.mockResolvedValue({
+      count: 2,
+      results: [
+        { id: 20, name: 'CO_DRCOG_2_2020', acquisition_year: 2020, covers_whole_area: true, point_density_ppm2: 4.5 },
+        { id: 13, name: 'CO_2013', acquisition_year: 2013, covers_whole_area: true, point_density_ppm2: 4.9 },
+      ],
+      years: [2013, 2020],
+      change_possible: true,
+      default_pair: [13, 20],
+      min_years_apart: 3,
+    })
+    SkyscanService.createJob.mockResolvedValue({ id: 'job-c' })
+    SkyscanService.getJob.mockResolvedValue(changeJob)
+    SkyscanService.getJobLayer.mockImplementation((id, layer) =>
+      Promise.resolve(
+        layer === 'changes'
+          ? { type: 'FeatureCollection', features: [change(1, 'new', null, 42.5, 2400), change(2, 'demolished', 13.1, null, 900), change(3, 'raised', 10.5, 18.7, 1300)] }
+          : { type: 'FeatureCollection', features: [] }
+      )
+    )
+    renderExplorer('/explore?mode=change')
+    await user.click(screen.getByText('test-draw'))
+    expect(await screen.findByText('7 years apart')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Detect change' }))
+    expect(SkyscanService.createJob).toHaveBeenCalledWith({ mode: 'change', aoi: AOI, dataset_before: 13, dataset: 20 })
+
+    await screen.findByRole('complementary', { name: 'Results' }, { timeout: 5000 })
+    const panel = () => screen.getByRole('complementary', { name: 'Results' })
+    expect(await within(panel()).findByText('2013 → 2020')).toBeInTheDocument()
+    // Each type shows its count with a label (never colour alone).
+    const types = within(panel()).getByRole('group', { name: 'Filter by change type' })
+    expect(within(types).getByRole('button', { name: /New\s*1/ })).toBeInTheDocument()
+    expect(within(types).getByRole('button', { name: /Demolished\s*1/ })).toBeInTheDocument()
+
+    // Clicking a change in the list opens its before/after detail.
+    const list = within(panel()).getAllByRole('listitem')
+    expect(list).toHaveLength(3)
+    await user.click(within(list[0]).getByRole('button'))
+    const detail = within(panel()).getByRole('region', { name: 'Selected change' })
+    expect(within(detail).getByText('42.5 m')).toBeInTheDocument()
+    expect(within(detail).getByText('none')).toBeInTheDocument()
+
+    // Turning a type off filters the list.
+    await user.click(within(types).getByRole('button', { name: /New\s*1/ }))
+    expect(within(panel()).getAllByRole('listitem')).toHaveLength(2)
+    expect(SkyscanService.exportUrl).toHaveBeenCalledWith('job-c', 'csv', { layer: 'changes' })
+  })
+})

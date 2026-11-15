@@ -3,9 +3,13 @@ import { useSearchParams } from 'react-router-dom'
 import Navbar from '@/components/layout/Navbar'
 import { Alert, Spinner } from '@/components/ui'
 import { CitySearch, DrawToolbar, ProcessingStepper, Segmented } from '@/components/explorer/controls'
-import { AoiLayer, BuildingsLayer, CoverageLayer, ReferenceLayer } from '@/components/explorer/layers'
+import { AoiLayer, BuildingsLayer, ChangesLayer, CoverageLayer, ReferenceLayer } from '@/components/explorer/layers'
+import ChangePanel from '@/components/explorer/ChangePanel'
+import { CHANGE_TYPES } from '@/components/explorer/changeTypes'
+import CompareSwipe from '@/components/explorer/CompareSwipe'
 import MapView from '@/components/explorer/MapView'
 import MeasurePanel from '@/components/explorer/MeasurePanel'
+import SurveyPicker from '@/components/explorer/SurveyPicker'
 import { useJob } from '@/hooks/useJob'
 import { SkyscanService } from '@/services'
 import { getErrorMessage } from '@/utils'
@@ -13,6 +17,7 @@ import { bbox, polygonAreaKm2 } from '@/utils/geo'
 
 export const LIMITS = { measure: 1.0, change: 0.5 }
 const DEFAULT_FILTERS = { minHeight: 0, minArea: 0, minConfidence: 0 }
+const DEFAULT_CHANGE_FILTERS = { types: CHANGE_TYPES.map((t) => t.key), minArea: 0 }
 
 function apiError(err) {
   const d = err?.response?.data
@@ -61,6 +66,9 @@ export default function ExplorerPage() {
   const [selected, setSelected] = useState(null)
   const [showReference, setShowReference] = useState(false)
   const [hideStepper, setHideStepper] = useState(false)
+  const [changeFilters, setChangeFilters] = useState(DEFAULT_CHANGE_FILTERS)
+  const [pair, setPair] = useState({ before: null, after: null })
+  const [compare, setCompare] = useState(true)
 
   const { job, error: jobError } = useJob(jobId)
   const running = job && !['done', 'failed'].includes(job.status)
@@ -120,8 +128,35 @@ export default function ExplorerPage() {
     }
   }, [aoi, areaKm2, limit])
 
-  const buildings = useResults(job, 'buildings', mode === 'measure' ? { epoch: 'single' } : null)
-  const reference = useResults(showReference ? job : null, 'reference')
+  const isMeasureJob = job?.mode === 'measure'
+  const isChangeJob = job?.mode === 'change'
+  const buildings = useResults(isMeasureJob ? job : null, 'buildings', { epoch: 'single' })
+  const reference = useResults(showReference && isMeasureJob ? job : null, 'reference')
+  const changes = useResults(isChangeJob ? job : null, 'changes')
+  const before = useResults(isChangeJob ? job : null, 'buildings', { epoch: 'before' })
+  const after = useResults(isChangeJob ? job : null, 'buildings', { epoch: 'after' })
+
+  // Default survey pair whenever the surveys for a new area arrive.
+  useEffect(() => {
+    const dp = surveys.data?.default_pair
+    setPair(dp ? { before: dp[0], after: dp[1] } : { before: null, after: null })
+  }, [surveys.data])
+
+  const changeFilterExpr = useMemo(
+    () => [
+      'all',
+      ['in', ['get', 'change_type'], ['literal', changeFilters.types]],
+      ['>=', ['get', 'area_m2'], changeFilters.minArea],
+    ],
+    [changeFilters]
+  )
+  const filteredChanges = useMemo(
+    () =>
+      (changes.data?.features || []).filter(
+        (f) => changeFilters.types.includes(f.properties.change_type) && f.properties.area_m2 >= changeFilters.minArea
+      ),
+    [changes.data, changeFilters]
+  )
 
   const filterExpr = useMemo(
     () => [
@@ -145,14 +180,27 @@ export default function ExplorerPage() {
 
   const coveredSurvey = surveys.data?.results?.find((d) => d.covers_whole_area) || surveys.data?.results?.[0]
   const noCoverage = surveys.data && surveys.data.count === 0
+  const changeBlocked = mode === 'change' && surveys.data && !surveys.data.change_possible
+  const pairYears = (id) => surveys.data?.results?.find((d) => d.id === id)?.acquisition_year
+  const pairInvalid =
+    mode === 'change' &&
+    surveys.data?.change_possible &&
+    (!(pair.before && pair.after) ||
+      pairYears(pair.after) - pairYears(pair.before) < (surveys.data.min_years_apart ?? 3))
 
   const run = async () => {
     setSubmitError(null)
     setSubmitting(true)
     try {
-      const created = await SkyscanService.createJob({ mode, aoi })
+      const body = { mode, aoi }
+      if (mode === 'change' && pair.before && pair.after) {
+        body.dataset_before = pair.before
+        body.dataset = pair.after
+      }
+      const created = await SkyscanService.createJob(body)
       setSelected(null)
       setFilters(DEFAULT_FILTERS)
+      setChangeFilters(DEFAULT_CHANGE_FILTERS)
       setHideStepper(false)
       setParam({ job: created.id, city: null })
       setDrawMode('clear')
@@ -187,15 +235,24 @@ export default function ExplorerPage() {
     setParam({ mode: m, job: null, city: null })
   }
 
+  const flyToFeature = (f) => {
+    const map = mapRef.current
+    if (!map || !f?.geometry) return
+    const [w, s, e, n] = bbox(f.geometry)
+    map.fitBounds([[w, s], [e, n]], { padding: { top: 120, bottom: 120, left: 360, right: 460 }, maxZoom: 18, duration: 900 })
+  }
+
   const note = surveys.loading
     ? 'Checking LiDAR coverage…'
     : surveys.error
       ? surveys.error
       : noCoverage
         ? 'No LiDAR survey covers this area. Draw inside the teal coverage.'
-        : coveredSurvey
-          ? `Survey: ${coveredSurvey.name} (${coveredSurvey.acquisition_year ?? 'year unknown'})`
-          : null
+        : mode === 'change'
+          ? null
+          : coveredSurvey
+            ? `Survey: ${coveredSurvey.name} (${coveredSurvey.acquisition_year ?? 'year unknown'})`
+            : null
 
   return (
     <div className="flex h-screen flex-col bg-ink-900">
@@ -228,6 +285,40 @@ export default function ExplorerPage() {
                   <ReferenceLayer map={map} data={reference.data} visible={showReference} />
                 </>
               )}
+              {mode === 'change' && isChangeJob && (
+                <>
+                  {/* Left of the swipe: the earlier survey. Without the swipe: the later one. */}
+                  <BuildingsLayer
+                    map={map}
+                    id="bld-main"
+                    data={compare ? before.data : after.data}
+                    view={view}
+                    opacity={0.7}
+                  />
+                  <ChangesLayer
+                    map={map}
+                    data={changes.data}
+                    view={view}
+                    filter={changeFilterExpr}
+                    selectedId={selected?.id}
+                    onSelect={setSelected}
+                  />
+                  {compare && job.status === 'done' && (
+                    <CompareSwipe
+                      mainMap={map}
+                      leftLabel={job.stats?.before?.year ?? 'Before'}
+                      rightLabel={job.stats?.after?.year ?? 'After'}
+                    >
+                      {(m2) => (
+                        <>
+                          <BuildingsLayer map={m2} id="bld-after" data={after.data} view={view} opacity={0.7} />
+                          <ChangesLayer map={m2} data={changes.data} view={view} filter={changeFilterExpr} selectedId={selected?.id} />
+                        </>
+                      )}
+                    </CompareSwipe>
+                  )}
+                </>
+              )}
             </>
           )}
         </MapView>
@@ -256,18 +347,22 @@ export default function ExplorerPage() {
               }}
             />
           </div>
-          {mode === 'measure' && (
-            <div className="pointer-events-auto">
-              <Segmented
-                label="View"
-                value={view}
-                onChange={setView}
-                options={[
-                  { value: '2d', label: '2D' },
-                  { value: '3d', label: '3D' },
-                ]}
-              />
-            </div>
+          <div className="pointer-events-auto">
+            <Segmented
+              label="View"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: '2d', label: '2D' },
+                { value: '3d', label: '3D' },
+              ]}
+            />
+          </div>
+          {mode === 'change' && isChangeJob && job.status === 'done' && (
+            <label className="pointer-events-auto flex items-center gap-2 rounded-md border bg-ink-850 px-3 py-1.5 text-xs text-muted">
+              <input type="checkbox" checked={compare} onChange={() => setCompare((c) => !c)} className="accent-teal" />
+              Swipe {job.stats?.before?.year} | {job.stats?.after?.year}
+            </label>
           )}
         </div>
 
@@ -281,7 +376,7 @@ export default function ExplorerPage() {
               setDrawMode={setDrawMode}
               areaKm2={areaKm2}
               limitKm2={limit}
-              canRun={Boolean(aoi) && !noCoverage && !surveys.loading}
+              canRun={Boolean(aoi) && !noCoverage && !surveys.loading && !changeBlocked && !pairInvalid}
               running={submitting}
               onRun={run}
               runLabel={mode === 'measure' ? 'Measure buildings' : 'Detect change'}
@@ -289,6 +384,9 @@ export default function ExplorerPage() {
               sampleLabel={`Try a sample area: ${sample?.name ?? ''}`}
               note={note}
             />
+          )}
+          {mode === 'change' && aoi && surveys.data && !running && (
+            <SurveyPicker surveys={surveys.data} pair={pair} setPair={setPair} />
           )}
           {submitError && (
             <Alert variant="error" className="w-72">
@@ -308,7 +406,42 @@ export default function ExplorerPage() {
         </div>
 
         {/* Right: results */}
-        {job?.status === 'done' && mode === 'measure' && (
+        {job?.status === 'done' && mode === 'change' && isChangeJob && (
+          <aside className="panel absolute bottom-3 right-3 top-3 z-20 w-96 overflow-y-auto p-4" aria-label="Results">
+            {changes.loading && (
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <Spinner size="sm" /> Loading changes
+              </div>
+            )}
+            {changes.error && <Alert variant="error">Could not load changes: {changes.error}</Alert>}
+            {changes.data && changes.data.features.length === 0 && (
+              <p className="text-sm text-muted">
+                No building changes between {job.stats?.before?.year} and {job.stats?.after?.year} in this area.
+              </p>
+            )}
+            {changes.data && changes.data.features.length > 0 && (
+              <ChangePanel
+                job={job}
+                features={filteredChanges}
+                total={changes.data.features.length}
+                filters={changeFilters}
+                setFilters={setChangeFilters}
+                selected={selected}
+                onSelect={(p, f) => {
+                  setSelected(p)
+                  if (f) flyToFeature(f)
+                }}
+                exportUrls={{
+                  geojson: SkyscanService.exportUrl(job.id, 'geojson', { layer: 'changes' }),
+                  csv: SkyscanService.exportUrl(job.id, 'csv', { layer: 'changes' }),
+                }}
+                onScreenshot={screenshot}
+              />
+            )}
+          </aside>
+        )}
+
+        {job?.status === 'done' && mode === 'measure' && isMeasureJob && (
           <aside className="panel absolute bottom-3 right-3 top-3 z-20 w-96 overflow-y-auto p-4" aria-label="Results">
             {buildings.loading && (
               <div className="flex items-center gap-2 text-sm text-muted">

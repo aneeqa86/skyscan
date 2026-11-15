@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { SkyscanService } from '@/services'
+import { changeColorExpr } from './changeTypes'
 
 const EMPTY = { type: 'FeatureCollection', features: [] }
 
@@ -186,5 +187,74 @@ export function ReferenceLayer({ map, data, visible }) {
   }, [map])
   useEffect(() => map.getSource('reference')?.setData(data || EMPTY), [map, data])
   useEffect(() => setVisible(map, ['reference-line'], visible), [map, visible])
+  return null
+}
+
+/** Change polygons coloured by type; extruded to the taller epoch's height in 3D. */
+export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, visible = true }) {
+  const ids = ['changes-fill', 'changes-extrusion', 'changes-line', 'changes-selected']
+  const select = useRef(onSelect)
+  select.current = onSelect
+
+  useEffect(() => {
+    ensureSource(map, 'changes', { type: 'geojson', data: EMPTY, promoteId: 'id' })
+    const before = beforeLabels(map)
+    map.addLayer({ id: 'changes-fill', type: 'fill', source: 'changes', paint: { 'fill-color': changeColorExpr, 'fill-opacity': 0.55 } }, before)
+    map.addLayer({
+      id: 'changes-extrusion',
+      type: 'fill-extrusion',
+      source: 'changes',
+      paint: {
+        'fill-extrusion-color': changeColorExpr,
+        'fill-extrusion-height': ['max', ['coalesce', ['get', 'height_after_m'], 0], ['coalesce', ['get', 'height_before_m'], 0]],
+        'fill-extrusion-opacity': 0.75,
+      },
+    })
+    map.addLayer({ id: 'changes-line', type: 'line', source: 'changes', paint: { 'line-color': changeColorExpr, 'line-width': 1 } })
+    map.addLayer({
+      id: 'changes-selected',
+      type: 'line',
+      source: 'changes',
+      filter: ['==', ['id'], -1],
+      paint: { 'line-color': '#E6EDF7', 'line-width': 2.5 },
+    })
+    const click = (e) => {
+      const f = e.features?.[0]
+      if (f) select.current?.(f.properties)
+    }
+    const enter = () => (map.getCanvas().style.cursor = 'pointer')
+    const leave = () => (map.getCanvas().style.cursor = '')
+    for (const l of ['changes-fill', 'changes-extrusion']) {
+      map.on('click', l, click)
+      map.on('mouseenter', l, enter)
+      map.on('mouseleave', l, leave)
+    }
+    return () => {
+      for (const l of ['changes-fill', 'changes-extrusion']) {
+        map.off('click', l, click)
+        map.off('mouseenter', l, enter)
+        map.off('mouseleave', l, leave)
+      }
+      if (map.getStyle()) {
+        removeLayers(map, ids)
+        map.getSource('changes') && map.removeSource('changes')
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map])
+
+  useEffect(() => map.getSource('changes')?.setData(data || EMPTY), [map, data])
+  useEffect(() => {
+    const three = view === '3d'
+    setVisible(map, ['changes-fill'], visible && !three)
+    setVisible(map, ['changes-extrusion'], visible && three)
+    setVisible(map, ['changes-line', 'changes-selected'], visible)
+  }, [map, view, visible])
+  useEffect(() => {
+    for (const l of ['changes-fill', 'changes-extrusion', 'changes-line']) map.getLayer(l) && map.setFilter(l, filter || true)
+  }, [map, filter])
+  useEffect(() => {
+    map.getLayer('changes-selected') && map.setFilter('changes-selected', ['==', ['id'], selectedId ?? -1])
+  }, [map, selectedId])
   return null
 }
