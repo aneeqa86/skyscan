@@ -19,19 +19,6 @@ export function decodePointCloud(buffer) {
   return { header, xyz, hagCm, classification, intensity }
 }
 
-/** ASPRS classes we label, with colours from the design tokens. */
-export const CLASS_COLORS = {
-  1: { label: 'Unclassified', color: [94, 110, 135] },
-  2: { label: 'Ground', color: [111, 127, 156] },
-  3: { label: 'Low vegetation', color: [157, 191, 90] },
-  4: { label: 'Medium vegetation', color: [157, 191, 90] },
-  5: { label: 'High vegetation', color: [157, 191, 90] },
-  6: { label: 'Building', color: [0, 201, 167] },
-  9: { label: 'Water', color: [43, 76, 126] },
-  17: { label: 'Bridge deck', color: [232, 180, 92] },
-}
-const OTHER = [94, 110, 135]
-
 /** Class groups used for the legend percentages and the class toggles. */
 export const CLASS_GROUPS = [
   { key: 'ground', label: 'Ground', classes: [2], color: '#6F7F9C' },
@@ -49,6 +36,10 @@ export const CLASS_GROUPS = [
     color: '#5E6E87',
   },
 ]
+
+/** Point colours in Class mode follow the legend groups, so every colour drawn has a legend entry. */
+const hexRgb = (hex) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16))
+const GROUP_RGB = Object.fromEntries(CLASS_GROUPS.map((g) => [g.key, hexRgb(g.color)]))
 
 export function groupOf(cls) {
   for (const g of CLASS_GROUPS) if (g.classes?.includes(cls)) return g.key
@@ -193,7 +184,7 @@ export function colors(pc, by, idx, gray = false, mask = null) {
     let c
     if (by === 'height') c = heightColor(pc.hagCm[i] / 100)
     else if (by === 'intensity') c = intensityColor(pc.intensity[i])
-    else c = CLASS_COLORS[classOf(pc, i, mask)]?.color || OTHER
+    else c = GROUP_RGB[groupOf(classOf(pc, i, mask))]
     if (gray) {
       const l = 0.85 * (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2])
       c = [l, l, l]

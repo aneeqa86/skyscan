@@ -48,4 +48,17 @@ describe('point cloud decoding', () => {
     const inten = colors(pc, 'intensity')
     expect(inten[3]).toBeGreaterThan(inten[0])
   })
+
+  it('colours classes outside the legend groups as "other", matching the legend', () => {
+    // Class 17 (bridge deck, or a vendor class in older surveys) and 9 (water) sit in "Unclassified and other".
+    const pc = decodePointCloud(
+      encode([
+        { x: 0, y: 0, z: 5, hag: 5, cls: 17, int: 0 },
+        { x: 1, y: 0, z: 0, hag: 0, cls: 9, int: 0 },
+        { x: 2, y: 0, z: 0, hag: 0, cls: 1, int: 0 },
+      ])
+    )
+    const c = Array.from(colors(pc, 'classification'))
+    expect(c).toEqual([94, 110, 135, 94, 110, 135, 94, 110, 135])
+  })
 })
