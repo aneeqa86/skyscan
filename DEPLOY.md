@@ -67,17 +67,6 @@ Without a domain, `<ip-with-dashes>.sslip.io` (for example
 `203-0-113-7.sslip.io`) resolves to that IP and works with Let's Encrypt.
 Open ports 80 and 443 in the cloud firewall and on the host.
 
-## 5. Frontend on a separate host (optional)
-
-nginx already serves the frontend. To host it elsewhere (for example Vercel,
-using `frontend/vercel.json`), set these on that host and add its origin to
-`CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` in `.env.prod`:
-
-```
-VITE_API_BASE_URL=https://skyscan.example.com/api
-VITE_MAPBOX_TOKEN=<Mapbox public token>
-```
-
 ## ARM hosts
 
 The stack builds on arm64 (for example Ampere VMs). The database image is built
