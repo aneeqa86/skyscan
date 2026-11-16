@@ -14,7 +14,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 WORKDIR /app
 COPY --chown=$MAMBA_USER:$MAMBA_USER . /app
-RUN mkdir -p /data/media /data/work /data/cache && chown -R $MAMBA_USER:$MAMBA_USER /data
+RUN mkdir -p /data/media /data/work /data/cache /app/staticfiles \
+    && chown -R $MAMBA_USER:$MAMBA_USER /data /app/staticfiles
 
 USER $MAMBA_USER
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PATH=/opt/conda/bin:$PATH \

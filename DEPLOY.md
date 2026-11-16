@@ -39,6 +39,7 @@ port 80 serving the built frontend and proxying `/api`.
 
 ```bash
 docker compose -f docker-compose.prod.yml exec api python manage.py load_3dep_index
+docker compose -f docker-compose.prod.yml exec api python manage.py load_ahn_index
 docker compose -f docker-compose.prod.yml exec api python manage.py precompute_city midtown-manhattan
 docker compose -f docker-compose.prod.yml exec api python manage.py precompute_change denver-union-station
 docker compose -f docker-compose.prod.yml exec api python manage.py createsuperuser
@@ -47,8 +48,40 @@ docker compose -f docker-compose.prod.yml exec api python manage.py createsuperu
 ## 4. HTTPS
 
 Production settings redirect to HTTPS and set secure cookies, so put a TLS
-terminator in front (Caddy, Traefik, or a cloud load balancer) that forwards
-`X-Forwarded-Proto`.
+terminator in front that forwards `X-Forwarded-Proto`. The repository includes
+a Caddy layer that gets a Let's Encrypt certificate automatically. Add to
+`.env.prod`:
+
+```
+SITE_HOST=skyscan.example.com   # any name that resolves to the host
+HTTP_PORT=127.0.0.1:8080        # nginx stays local; Caddy owns 80 and 443
+```
+
+and start with both files:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml --env-file .env.prod up -d --build
+```
+
+Without a domain, `<ip-with-dashes>.sslip.io` (for example
+`203-0-113-7.sslip.io`) resolves to that IP and works with Let's Encrypt.
+Open ports 80 and 443 in the cloud firewall and on the host.
+
+## 5. Frontend on a separate host (optional)
+
+nginx already serves the frontend. To host it elsewhere (for example Vercel,
+using `frontend/vercel.json`), set these on that host and add its origin to
+`CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` in `.env.prod`:
+
+```
+VITE_API_BASE_URL=https://skyscan.example.com/api
+VITE_MAPBOX_TOKEN=<Mapbox public token>
+```
+
+## ARM hosts
+
+The stack builds on arm64 (for example Ampere VMs). The database image is built
+from `docker/postgis`, because `postgis/postgis` publishes amd64 images only.
 
 ## Notes
 

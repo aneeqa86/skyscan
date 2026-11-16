@@ -5,7 +5,7 @@ name: skyscan-prod
 
 services:
   db:
-    image: postgis/postgis:16-3.4
+    build: ./docker/postgis
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME}

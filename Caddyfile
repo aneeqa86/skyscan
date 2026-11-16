@@ -1,0 +1,8 @@
+# HTTPS in front of the production stack. Caddy gets a Let's Encrypt
+# certificate for SITE_HOST (set in .env.prod) and forwards to nginx.
+{$SITE_HOST} {
+	encode gzip
+	reverse_proxy web:80 {
+		header_up X-Forwarded-Proto https
+	}
+}

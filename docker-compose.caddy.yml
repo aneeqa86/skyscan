@@ -1,0 +1,22 @@
+# Optional HTTPS layer for docker-compose.prod.yml. Set SITE_HOST and
+# HTTP_PORT=127.0.0.1:8080 in .env.prod, then:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.caddy.yml --env-file .env.prod up -d --build
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    environment:
+      SITE_HOST: ${SITE_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
