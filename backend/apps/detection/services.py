@@ -86,9 +86,10 @@ def _to_geos(poly):
     return g
 
 
-def save_buildings(job: Job, fps_wgs84, epoch: str, city=None) -> list[Building]:
+def save_buildings(job: Job, fps_wgs84, epoch: str, city=None, ndvi=None) -> list[Building]:
     objs = []
-    for poly, f in fps_wgs84:
+    ndvi = ndvi if ndvi is not None else [None] * len(fps_wgs84)
+    for (poly, f), nd in zip(fps_wgs84, ndvi, strict=True):
         try:
             geom = _to_geos(poly)
         except ValueError as exc:
@@ -107,9 +108,39 @@ def save_buildings(job: Job, fps_wgs84, epoch: str, city=None) -> list[Building]
                 volume_m3=f.volume_m3,
                 point_count=f.point_count,
                 confidence=f.confidence,
+                ndvi=nd,
             )
         )
     return Building.objects.bulk_create(objs, batch_size=1000)
+
+
+# Drop footprints that aerial imagery shows are mostly vegetation (see apps.imagery).
+VEGETATION_FILTER_DEFAULT = True
+
+
+def apply_vegetation_check(job: Job, result, progress) -> tuple[list, dict]:
+    """Run the NDVI check on a measure result in place. Returns (ndvi per kept footprint, info)."""
+    from apps.imagery.services import vegetation_check
+    from apps.lidar.pipeline.measure import summarize
+
+    progress("vectorizing", 86, "Checking footprints against aerial imagery")
+    try:
+        keep, ndvi, info = vegetation_check(job, result.footprints_wgs84, job.dataset.acquisition_year)
+    except Exception as exc:  # imagery is extra evidence; it never sinks a measurement
+        log.exception("vegetation check failed for job %s", job.pk)
+        return [None] * len(result.footprints_wgs84), {"available": False, "reason": f"Imagery check failed: {exc}"}
+    apply = bool(job.params.get("vegetation_filter", VEGETATION_FILTER_DEFAULT))
+    info["applied"] = apply and info.get("available", False)
+    if info["applied"] and not keep.all():
+        idx = [i for i, k in enumerate(keep) if k]
+        result.footprints_wgs84 = [result.footprints_wgs84[i] for i in idx]
+        result.epoch.footprints = [result.epoch.footprints[i] for i in idx]
+        ndvi = [ndvi[i] for i in idx]
+        result.stats.update(summarize(result.epoch.footprints))
+        info["removed"] = int(len(keep) - len(idx))
+    else:
+        info["removed"] = 0
+    return ndvi, info
 
 
 def validate_job(job: Job, footprints_utm, heights, epsg: int, min_area: float) -> dict:
@@ -161,7 +192,8 @@ def validate_job(job: Job, footprints_utm, heights, epsg: int, min_area: float) 
     return m
 
 
-def run_measure_job(job_id) -> Job:
+def run_measure_job(job_id, overlays: bool = True) -> Job:
+    """overlays=False skips the map imagery (showcase chunks; the merged job gets its own)."""
     job = Job.objects.get(pk=job_id)
     progress = make_progress(job)
     t0 = time.monotonic()
@@ -172,11 +204,12 @@ def run_measure_job(job_id) -> Job:
             job.save(update_fields=["dataset"])
         source = get_source(job.dataset.provider)
         result = run_measure(source, job.dataset, job.aoi, job.params, progress)
+        ndvi, veg_info = apply_vegetation_check(job, result, progress)
 
         progress("vectorizing", 88, "Saving footprints")
         with transaction.atomic():
             Building.objects.filter(job=job).delete()
-            save_buildings(job, result.footprints_wgs84, Building.Epoch.SINGLE, city=job.city)
+            save_buildings(job, result.footprints_wgs84, Building.Epoch.SINGLE, city=job.city, ndvi=ndvi)
         pc = pointcloud_path(job)
         pc.parent.mkdir(parents=True, exist_ok=True)
         pc.write_bytes(result.pointcloud)
@@ -202,6 +235,17 @@ def run_measure_job(job_id) -> Job:
 
         stats = dict(result.stats)
         stats["validation"] = val
+        imagery = {"vegetation": veg_info}
+        if overlays:
+            progress("validating", 96, "Preparing aerial imagery")
+            try:
+                from apps.imagery.services import run_display_imagery
+
+                imagery.update(run_display_imagery(job))
+            except Exception as exc:
+                log.exception("imagery overlays failed for job %s", job.pk)
+                imagery.update({"available": False, "reason": f"Imagery could not be prepared: {exc}"})
+        stats["imagery"] = imagery
         stats["pointcloud_bytes"] = len(result.pointcloud)
         stats["processing_seconds"] = round(time.monotonic() - t0, 1)
         Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(

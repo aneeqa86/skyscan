@@ -37,6 +37,7 @@ LOCAL_APPS = [
     "apps.detection",
     "apps.change",
     "apps.tiles",
+    "apps.imagery",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

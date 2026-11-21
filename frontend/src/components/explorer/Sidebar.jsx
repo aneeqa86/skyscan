@@ -9,6 +9,7 @@ import { SectionLabel, SelectField, Slider, Spinner, Svg, SwitchRow } from '@/co
 import { useDebounce } from '@/hooks'
 import { cn, formatNumber } from '@/utils'
 import { CHANGE_TYPES } from './changeTypes'
+import { IMAGERY_FILTERS } from './imagery'
 import { MAPBOX_TOKEN } from './MapView'
 
 /** Places SKYSCAN can process: showcases first, then other covered areas. */
@@ -108,7 +109,10 @@ function PlaceSearch({ onPick, disabled }) {
               role="option"
               aria-selected={i === active}
               onMouseDown={() => pick(r)}
-              className={cn('flex min-h-target cursor-pointer items-center rounded-control px-3 text-sm', i === active ? 'bg-raised text-fg' : 'text-muted')}
+              className={cn(
+                'flex min-h-target cursor-pointer items-center rounded-control px-3 text-sm',
+                i === active ? 'bg-raised text-fg' : 'text-muted'
+              )}
             >
               {r.label}
             </li>
@@ -144,6 +148,7 @@ export default function Sidebar({
   limitKm2,
   layers,
   setLayers,
+  imagery,
   hasResults,
   filters,
   setFilters,
@@ -224,7 +229,13 @@ export default function Sidebar({
               {label}
             </button>
           ))}
-          <button type="button" aria-label="Clear area" className="btn-secondary w-target px-0" disabled={locked || !aoi} onClick={() => setDrawMode('clear')}>
+          <button
+            type="button"
+            aria-label="Clear area"
+            className="btn-secondary w-target px-0"
+            disabled={locked || !aoi}
+            onClick={() => setDrawMode('clear')}
+          >
             <Svg name="trash" />
           </button>
         </div>
@@ -281,8 +292,8 @@ export default function Sidebar({
               <span className="text-fg">Change is not available here.</span>
               <span className="text-muted">{surveys.data.change_reason}</span>
               <span className="text-xs text-muted">
-                {surveys.data.years?.length ? `Survey years here: ${surveys.data.years.join(', ')}. ` : ''}It needs two
-                surveys at least {minGap} years apart that each cover the whole area.
+                {surveys.data.years?.length ? `Survey years here: ${surveys.data.years.join(', ')}. ` : ''}It needs two surveys at least{' '}
+                {minGap} years apart that each cover the whole area.
               </span>
             </div>
           )}
@@ -293,24 +304,109 @@ export default function Sidebar({
         <SectionLabel className="mx-2 mb-2">Layers</SectionLabel>
         {mode === 'measure' ? (
           <>
-            <SwitchRow label="Building footprints" checked={layers.buildings} disabled={locked || !hasResults} onChange={(v) => setLayers({ ...layers, buildings: v })} swatch={{ border: '.75px solid #00C9A7', background: 'rgba(0,201,167,.3)' }} />
-            <SwitchRow label="Height labels" checked={layers.labels} disabled={locked || !hasResults} onChange={(v) => setLayers({ ...layers, labels: v })} swatch={{ border: '.75px solid #FF6B35' }} />
-            <SwitchRow label="Reference footprints" checked={layers.reference} disabled={locked || !hasResults} onChange={(v) => setLayers({ ...layers, reference: v })} swatch={{ border: '.75px dashed #E8EEF6' }} />
+            <SwitchRow
+              label="Building footprints"
+              checked={layers.buildings}
+              disabled={locked || !hasResults}
+              onChange={(v) => setLayers({ ...layers, buildings: v })}
+              swatch={{ border: '.75px solid #00C9A7', background: 'rgba(0,201,167,.3)' }}
+            />
+            <SwitchRow
+              label="Height labels"
+              checked={layers.labels}
+              disabled={locked || !hasResults}
+              onChange={(v) => setLayers({ ...layers, labels: v })}
+              swatch={{ border: '.75px solid #FF6B35' }}
+            />
+            <SwitchRow
+              label="Reference footprints"
+              checked={layers.reference}
+              disabled={locked || !hasResults}
+              onChange={(v) => setLayers({ ...layers, reference: v })}
+              swatch={{ border: '.75px dashed #E8EEF6' }}
+            />
           </>
         ) : (
-          <SwitchRow label="Swipe between surveys" checked={layers.swipe} disabled={locked || !hasResults} onChange={(v) => setLayers({ ...layers, swipe: v })} swatch={{ borderLeft: '.75px solid #E8EEF6' }} />
+          <SwitchRow
+            label="Swipe between surveys"
+            checked={layers.swipe}
+            disabled={locked || !hasResults}
+            onChange={(v) => setLayers({ ...layers, swipe: v })}
+            swatch={{ borderLeft: '.75px solid #E8EEF6' }}
+          />
         )}
-        <SwitchRow label="LiDAR coverage" checked={layers.coverage} disabled={locked} onChange={(v) => setLayers({ ...layers, coverage: v })} swatch={{ border: '.75px solid #00C9A7', background: 'rgba(0,201,167,.1)' }} />
-        <SwitchRow label="Basemap" checked={layers.basemap} disabled={locked} onChange={(v) => setLayers({ ...layers, basemap: v })} swatch={{ border: '.75px solid #2A3A57', background: '#0D1627' }} />
+        <SwitchRow
+          label="Aerial imagery"
+          checked={layers.imagery && Boolean(imagery?.years.length)}
+          disabled={locked || !imagery?.years.length}
+          onChange={(v) => setLayers({ ...layers, imagery: v })}
+          swatch={{ border: '.75px solid #E8B45C', background: 'linear-gradient(135deg,#3B4A3A,#6B6452)' }}
+        />
+        {layers.imagery && imagery?.years.length > 0 && !locked && (
+          <div className="mx-2 mb-1 flex flex-col gap-2">
+            {(imagery.twoSides ? ['left', 'right'] : ['right']).map((side) => (
+              <SelectField
+                key={side}
+                label={imagery.twoSides ? (side === 'left' ? 'Left of the swipe' : 'Right of the swipe') : 'Image year'}
+                value={imagery.value[side] ?? ''}
+                onChange={(v) => imagery.onChange(Number(v), side)}
+                options={imagery.years.map((y) => ({ value: y, label: String(y) }))}
+              />
+            ))}
+            {imagery.provider && <p className="m-0 font-mono text-[11px] text-muted">{imagery.provider}</p>}
+          </div>
+        )}
+        {imagery?.reason && <p className="mx-2 mb-1 mt-0 text-xs text-muted">{imagery.reason}</p>}
+        <SwitchRow
+          label="LiDAR coverage"
+          checked={layers.coverage}
+          disabled={locked}
+          onChange={(v) => setLayers({ ...layers, coverage: v })}
+          swatch={{ border: '.75px solid #00C9A7', background: 'rgba(0,201,167,.1)' }}
+        />
+        <SwitchRow
+          label="Basemap"
+          checked={layers.basemap}
+          disabled={locked}
+          onChange={(v) => setLayers({ ...layers, basemap: v })}
+          swatch={{ border: '.75px solid #2A3A57', background: '#0D1627' }}
+        />
       </section>
 
       <section className="flex flex-col gap-1 p-4">
         <SectionLabel className="mb-2">{locked ? 'Filters applied' : 'Filters'}</SectionLabel>
         {mode === 'measure' ? (
           <>
-            <Slider label="Min height" value={filters.minHeight} display={`${filters.minHeight.toFixed(1)} m`} min={0} max={50} step={0.5} disabled={locked} onChange={(v) => setFilters({ ...filters, minHeight: v })} />
-            <Slider label="Min area" value={filters.minArea} display={`${filters.minArea} m²`} min={0} max={200} step={5} disabled={locked} onChange={(v) => setFilters({ ...filters, minArea: v })} />
-            <Slider label="Min confidence" value={filters.minConfidence} display={filters.minConfidence.toFixed(2)} min={0} max={1} step={0.05} disabled={locked} onChange={(v) => setFilters({ ...filters, minConfidence: v })} />
+            <Slider
+              label="Min height"
+              value={filters.minHeight}
+              display={`${filters.minHeight.toFixed(1)} m`}
+              min={0}
+              max={50}
+              step={0.5}
+              disabled={locked}
+              onChange={(v) => setFilters({ ...filters, minHeight: v })}
+            />
+            <Slider
+              label="Min area"
+              value={filters.minArea}
+              display={`${filters.minArea} m²`}
+              min={0}
+              max={200}
+              step={5}
+              disabled={locked}
+              onChange={(v) => setFilters({ ...filters, minArea: v })}
+            />
+            <Slider
+              label="Min confidence"
+              value={filters.minConfidence}
+              display={filters.minConfidence.toFixed(2)}
+              min={0}
+              max={1}
+              step={0.05}
+              disabled={locked}
+              onChange={(v) => setFilters({ ...filters, minConfidence: v })}
+            />
           </>
         ) : (
           <>
@@ -329,16 +425,39 @@ export default function Sidebar({
                         types: on ? changeFilters.types.filter((k) => k !== t.key) : [...changeFilters.types, t.key],
                       })
                     }
-                    className={cn('flex h-target items-center gap-2 rounded-control border-hair px-2.5 text-[13px] transition-colors', on ? 'bg-raised' : 'border-line text-disabled')}
+                    className={cn(
+                      'flex h-target items-center gap-2 rounded-control border-hair px-2.5 text-[13px] transition-colors',
+                      on ? 'bg-raised' : 'border-line text-disabled'
+                    )}
                     style={on ? { borderColor: t.color } : undefined}
                   >
-                    <span aria-hidden="true" style={{ color: on ? t.color : undefined }}>{t.icon}</span>
+                    <span aria-hidden="true" style={{ color: on ? t.color : undefined }}>
+                      {t.icon}
+                    </span>
                     {t.label}
                   </button>
                 )
               })}
             </div>
-            <Slider label="Min size" value={changeFilters.minArea} display={`${changeFilters.minArea} m²`} min={0} max={500} step={10} disabled={locked} onChange={(v) => setChangeFilters({ ...changeFilters, minArea: v })} />
+            <Slider
+              label="Min size"
+              value={changeFilters.minArea}
+              display={`${changeFilters.minArea} m²`}
+              min={0}
+              max={500}
+              step={10}
+              disabled={locked}
+              onChange={(v) => setChangeFilters({ ...changeFilters, minArea: v })}
+            />
+            {imagery?.years.length > 0 && (
+              <SelectField
+                label="Imagery check"
+                value={changeFilters.imagery}
+                disabled={locked}
+                onChange={(v) => setChangeFilters({ ...changeFilters, imagery: v })}
+                options={IMAGERY_FILTERS}
+              />
+            )}
           </>
         )}
         {locked ? (

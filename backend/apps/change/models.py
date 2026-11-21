@@ -23,5 +23,19 @@ class ChangeFeature(models.Model):
     volume_delta_m3 = models.FloatField()
     confidence = models.FloatField()
 
+    # Aerial imagery check (apps.imagery): does the imagery agree, and when did it change?
+    class ImageryStatus(models.TextChoices):
+        CONFIRMED = "confirmed"
+        LIKELY = "likely"
+        NOT_VISIBLE = "not_visible"
+        VEGETATION = "vegetation"
+        TOO_SMALL = "too_small"
+        NO_IMAGERY = "no_imagery"
+
+    imagery_status = models.CharField(max_length=12, choices=ImageryStatus.choices, blank=True, db_index=True)
+    imagery_score = models.FloatField(null=True, blank=True)
+    imagery_first_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    imagery_window_start = models.PositiveSmallIntegerField(null=True, blank=True)
+
     class Meta:
         ordering = ["-area_m2"]

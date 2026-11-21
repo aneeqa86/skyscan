@@ -80,6 +80,20 @@ Notes from checking (2026-11-15):
 Overture is tried first because it merges OSM, Microsoft and Esri footprints and carries OSM
 heights where they exist. When a reference has heights, SKYSCAN also reports height error.
 
+## Aerial imagery (corroboration, vegetation check, map layer)
+
+| Source | Status | Access | License |
+|---|---|---|---|
+| [USDA NAIP](https://www.fsa.usda.gov/programs-and-services/aerial-photography/imagery-programs/naip-imagery/) (United States) | Live. Each state is flown every 2-3 years; 1 m pixels until about 2017, then 0.6 m and recently 0.3 m. Usually 4 bands (red, green, blue, near-infrared) | [Microsoft Planetary Computer](https://planetarycomputer.microsoft.com/dataset/naip): free STAC search API (`/api/stac/v1/search`, collection `naip`) and cloud-optimised GeoTIFFs signed with a free anonymous token (`/api/sas/v1/token/naip`). No account or key. Only the area's pixels are read | Public domain |
+| [PDOK luchtfoto](https://www.pdok.nl/introductie/-/article/pdok-luchtfoto-rgb-open-) (Netherlands) | Live. Yearly national orthophotos from 2016: RGB (`luchtfotorgb`, 25 cm and 8 cm) and colour-infrared (`luchtfotocir`) | WMS 1.3.0 in EPSG:3857, up to 2500 px per request. No key | CC BY 4.0, Beeldmateriaal Nederland |
+
+Checked on 2026-11-21: Denver Union Station has NAIP for 2011, 2013, 2015, 2017,
+2019, 2021 and 2023, all 4-band. PDOK lists RGB layers for 2016-2026 and CIR for
+2016-2025 except 2021.
+
+AWS also hosts NAIP (`naip-analytic`, `naip-visualization`), but those buckets are
+"requester pays", so downloads would be billed; SKYSCAN does not use them.
+
 ## Listed for reference (no adapter)
 
 ### United States
@@ -117,5 +131,6 @@ heights where they exist. When a reference has heights, SKYSCAN also reports hei
 ## Attribution shown in the app
 
 The map footer and the About page credit every source a result was built from: USGS 3DEP for
-point clouds, Overture Maps and "© OpenStreetMap contributors" for reference footprints, and
-Mapbox for the basemap.
+point clouds, Overture Maps and "© OpenStreetMap contributors" for reference footprints, USDA
+NAIP or Beeldmateriaal Nederland (PDOK) for aerial imagery, and Mapbox for the basemap. Exports
+name the imagery source when a job used it.

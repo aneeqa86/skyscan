@@ -92,8 +92,8 @@ export default function CompareSwipe({ mainMap, leftLabel, rightLabel, children 
         >
           ⇆
         </button>
-        <span className="chip absolute top-16 -translate-x-[calc(100%+8px)] border-line bg-ink-800 text-fg">{leftLabel}</span>
-        <span className="chip absolute top-16 translate-x-2 border-line bg-ink-800 text-fg">{rightLabel}</span>
+        <span className="chip absolute top-16 -translate-x-[calc(100%+8px)] whitespace-nowrap border-line bg-ink-800 text-fg">{leftLabel}</span>
+        <span className="chip absolute top-16 translate-x-2 whitespace-nowrap border-line bg-ink-800 text-fg">{rightLabel}</span>
       </div>
       <label className="sr-only" htmlFor="compare-pos">
         Compare position

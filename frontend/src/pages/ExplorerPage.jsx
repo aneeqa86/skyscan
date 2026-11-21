@@ -6,11 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { CHANGE_TYPES } from '@/components/explorer/changeTypes'
 import CompareSwipe from '@/components/explorer/CompareSwipe'
+import { ImageryTimeline, imageryDefaults, imageryFilterExpr, imageryFilterTest } from '@/components/explorer/imagery'
 import {
   AoiLayer,
   BuildingsLayer,
   ChangesLayer,
   CoverageLayer,
+  ImageryLayer,
   ReferenceLayer,
   ScanLineLayer,
   setBasemapVisible,
@@ -33,6 +35,7 @@ const DEFAULT_FILTERS = { minHeight: 0, minArea: 0, minConfidence: 0 }
 const DEFAULT_CHANGE_FILTERS = {
   types: CHANGE_TYPES.map((t) => t.key),
   minArea: 0,
+  imagery: 'all',
 }
 const DEFAULT_LAYERS = {
   buildings: true,
@@ -41,6 +44,7 @@ const DEFAULT_LAYERS = {
   swipe: true,
   coverage: true,
   basemap: true,
+  imagery: false,
 }
 
 function apiError(err) {
@@ -75,6 +79,8 @@ export function useResults(job, layer, params) {
   }, [job?.id, job?.status, layer, key]) // eslint-disable-line react-hooks/exhaustive-deps
   return state
 }
+
+const swipeLabel = (lidarYear, imageYear) => (imageYear ? `${lidarYear} · image ${imageYear}` : lidarYear)
 
 function initialViewFrom(params) {
   const lon = Number(params.get('lon'))
@@ -111,8 +117,17 @@ export default function ExplorerPage() {
   const [layers, setLayers] = useState(DEFAULT_LAYERS)
   const [selected, setSelected] = useState(null) // GeoJSON feature
   const [pair, setPair] = useState({ before: null, after: null })
+  const [imageryYears, setImageryYears] = useState({ left: null, right: null })
 
   const { job, error: jobError } = useJob(jobId)
+  const imagery = useMemo(() => imageryDefaults(job?.status === 'done' ? job : null), [job])
+  const imageryStats = job?.stats?.imagery
+  // Stable corner array for the image source (job objects are replaced while polling).
+  const cornersKey = JSON.stringify(imageryStats?.corners || null)
+  const corners = useMemo(() => JSON.parse(cornersKey), [cornersKey])
+  useEffect(() => {
+    setImageryYears({ left: imagery.left, right: imagery.right })
+  }, [job?.id, imagery.left, imagery.right])
   const running = Boolean(job && !['done', 'failed'].includes(job.status))
   const done = job?.status === 'done'
   const areaKm2 = aoi ? polygonAreaKm2(aoi) : 0
@@ -267,16 +282,34 @@ export default function ExplorerPage() {
     [buildings.data, filters]
   )
   const changeFilterExpr = useMemo(
-    () => ['all', ['in', ['get', 'change_type'], ['literal', changeFilters.types]], ['>=', ['get', 'area_m2'], changeFilters.minArea]],
+    () => [
+      'all',
+      ['in', ['get', 'change_type'], ['literal', changeFilters.types]],
+      ['>=', ['get', 'area_m2'], changeFilters.minArea],
+      imageryFilterExpr(changeFilters.imagery),
+    ],
     [changeFilters]
   )
   const filteredChanges = useMemo(
     () =>
       (changes.data?.features || []).filter(
-        (f) => changeFilters.types.includes(f.properties.change_type) && f.properties.area_m2 >= changeFilters.minArea
+        (f) =>
+          changeFilters.types.includes(f.properties.change_type) &&
+          f.properties.area_m2 >= changeFilters.minArea &&
+          imageryFilterTest(changeFilters.imagery, f.properties)
       ),
     [changes.data, changeFilters]
   )
+
+  const imageryUrl = (year) => (job && year ? SkyscanService.imageryUrl(job.id, year) : null)
+  const swipeOn = mode === 'change' && layers.swipe
+  // With the swipe on, the main map is the earlier side; otherwise it shows the chosen year.
+  const mainImageYear = swipeOn ? imageryYears.left : imageryYears.right
+  const showImagery = layers.imagery && imagery.years.length > 0 && !points
+  const pickImageryYear = (y, side = 'right') => {
+    setLayers((l) => ({ ...l, imagery: true }))
+    setImageryYears((s) => ({ ...s, [side]: y }))
+  }
 
   const pointLookup = surveys.data?.point
   const noCoverage = surveys.data && surveys.data.count === 0
@@ -518,6 +551,14 @@ export default function ExplorerPage() {
             limitKm2={limit}
             layers={layers}
             setLayers={setLayers}
+            imagery={{
+              years: imagery.years,
+              value: imageryYears,
+              onChange: pickImageryYear,
+              twoSides: swipeOn,
+              provider: imageryStats?.provider?.name,
+              reason: done && !imagery.years.length ? imageryStats?.reason : null,
+            }}
             hasResults={done}
             filters={filters}
             setFilters={setFilters}
@@ -550,6 +591,7 @@ export default function ExplorerPage() {
           >
             {(map) => (
               <>
+                <ImageryLayer map={map} url={imageryUrl(mainImageYear)} corners={corners} visible={showImagery} />
                 <CoverageLayer map={map} visible={layers.coverage && !points} />
                 <AoiLayer map={map} aoi={job?.aoi && !aoi ? job.aoi : null} />
                 {running && <ScanLineLayer map={map} aoi={job.aoi} progress={job.progress ?? 0} />}
@@ -591,11 +633,12 @@ export default function ExplorerPage() {
                     {layers.swipe && !points && done && (
                       <CompareSwipe
                         mainMap={map}
-                        leftLabel={job.stats?.before?.year ?? 'Before'}
-                        rightLabel={job.stats?.after?.year ?? 'After'}
+                        leftLabel={swipeLabel(job.stats?.before?.year ?? 'Before', showImagery && imageryYears.left)}
+                        rightLabel={swipeLabel(job.stats?.after?.year ?? 'After', showImagery && imageryYears.right)}
                       >
                         {(m2) => (
                           <>
+                            <ImageryLayer map={m2} url={imageryUrl(imageryYears.right)} corners={corners} visible={showImagery} />
                             <BuildingsLayer map={m2} id="bld-after" data={after.data} view={view} opacity={0.7} neutral />
                             <ChangesLayer
                               map={m2}
@@ -640,6 +683,22 @@ export default function ExplorerPage() {
               <div className="absolute bottom-3 left-4 z-10">
                 <CoordScale map={mapRef.current} />
               </div>
+              {done && imagery.years.length > 0 && (
+                <div className="absolute bottom-16 left-1/2 z-10 hidden max-w-[calc(100%-2rem)] -translate-x-1/2 overflow-x-auto md:block">
+                  <ImageryTimeline
+                    years={imagery.years}
+                    lidarYears={
+                      isChangeJob
+                        ? [job.stats?.before?.year, job.stats?.after?.year].filter(Boolean)
+                        : [job.stats?.dataset_year].filter(Boolean)
+                    }
+                    year={layers.imagery ? (swipeOn ? imageryYears.right : mainImageYear) : null}
+                    onYear={(y) => pickImageryYear(y)}
+                    selected={isChangeView ? selected?.properties : null}
+                    provider={imageryStats?.provider?.name}
+                  />
+                </div>
+              )}
               {mode === 'measure' && selected && (
                 <BuildingPopup
                   map={mapRef.current}

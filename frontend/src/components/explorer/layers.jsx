@@ -19,7 +19,7 @@ export const HEIGHT_STEPS = [
 ]
 const heightColor = ['step', ['coalesce', ['get', 'height_m'], 0], HEIGHT_STEPS[0][1], ...HEIGHT_STEPS.slice(1).flat()]
 
-const OURS = /^(coverage|aoi|scan|reference|changes|labels|bld|buildings)/
+const OURS = /^(coverage|aoi|scan|reference|changes|labels|bld|buildings|imagery)/
 
 function ensureSource(map, id, spec) {
   if (!map.getSource(id)) map.addSource(id, spec)
@@ -44,6 +44,42 @@ export function setBasemapVisible(map, visible) {
     if (l.type === 'background' || OURS.test(l.id) || l.id.startsWith('gl-draw')) continue
     map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none')
   }
+}
+
+/**
+ * Aerial image for one year, pinned to the job area by its four corners.
+ * Sits above the basemap and below every SKYSCAN layer.
+ */
+export function ImageryLayer({ map, url, corners, visible = true, opacity = 0.9 }) {
+  useEffect(() => {
+    if (!url || !corners) return undefined
+    const src = map.getSource('imagery')
+    if (src) src.updateImage({ url, coordinates: corners })
+    else map.addSource('imagery', { type: 'image', url, coordinates: corners })
+    if (!map.getLayer('imagery-raster')) {
+      const ours = map.getStyle().layers.find((l) => l.id !== 'imagery-raster' && (OURS.test(l.id) || l.id.startsWith('gl-draw')))
+      map.addLayer(
+        { id: 'imagery-raster', type: 'raster', source: 'imagery', paint: { 'raster-fade-duration': 150 } },
+        ours?.id ?? firstSymbol(map)
+      )
+    }
+    return undefined
+  }, [map, url, corners])
+  useEffect(() => {
+    if (map.getLayer('imagery-raster')) {
+      map.setLayoutProperty('imagery-raster', 'visibility', visible && url ? 'visible' : 'none')
+      map.setPaintProperty('imagery-raster', 'raster-opacity', opacity)
+    }
+  }, [map, url, visible, opacity])
+  useEffect(
+    () => () => {
+      if (!map.getStyle()) return
+      removeLayers(map, ['imagery-raster'])
+      if (map.getSource('imagery')) map.removeSource('imagery')
+    },
+    [map]
+  )
+  return null
 }
 
 export function CoverageLayer({ map, visible = true }) {
@@ -126,11 +162,32 @@ export function ScanLineLayer({ map, aoi, progress }) {
     const ys = ring.map((c) => c[1])
     const [w, e, s, n] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
     const x = w + ((e - w) * Math.min(Math.max(progress, 0), 100)) / 100
-    map.getSource('scan')?.setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [[x, s], [x, n]] } })
+    map.getSource('scan')?.setData({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [x, s],
+          [x, n],
+        ],
+      },
+    })
     map.getSource('scan-done')?.setData({
       type: 'Feature',
       properties: {},
-      geometry: { type: 'Polygon', coordinates: [[[w, s], [x, s], [x, n], [w, n], [w, s]]] },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [w, s],
+            [x, s],
+            [x, n],
+            [w, n],
+            [w, s],
+          ],
+        ],
+      },
     })
   }, [map, aoi, progress])
   return null
@@ -297,7 +354,10 @@ export function ChangesLayer({ map, data, view, filter, selectedId, onSelect, vi
   useEffect(() => {
     ensureSource(map, 'changes', { type: 'geojson', data: EMPTY, promoteId: 'id' })
     const before = firstSymbol(map)
-    map.addLayer({ id: 'changes-fill', type: 'fill', source: 'changes', paint: { 'fill-color': changeColorExpr, 'fill-opacity': 0.5 } }, before)
+    map.addLayer(
+      { id: 'changes-fill', type: 'fill', source: 'changes', paint: { 'fill-color': changeColorExpr, 'fill-opacity': 0.5 } },
+      before
+    )
     map.addLayer({
       id: 'changes-extrusion',
       type: 'fill-extrusion',

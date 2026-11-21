@@ -81,6 +81,7 @@ class Building(models.Model):
     volume_m3 = models.FloatField()
     point_count = models.PositiveIntegerField(default=0)
     confidence = models.FloatField()
+    ndvi = models.FloatField(null=True, blank=True, help_text="mean NDVI from aerial imagery, if available")
 
     class Meta:
         indexes = [models.Index(fields=["job", "epoch"])]

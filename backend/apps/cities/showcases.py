@@ -142,7 +142,7 @@ def precompute(slug: str, stdout=None, max_chunk_km2: float | None = None) -> Jo
     done = []
     for i, c in enumerate(parts, 1):
         job = Job.objects.create(mode=mode, aoi=c, area_km2=area_km2(c), params={}, **kwargs)
-        job = run_change_job(job.id) if mode == "change" else run_measure_job(job.id)
+        job = run_change_job(job.id, imagery=False) if mode == "change" else run_measure_job(job.id, overlays=False)
         if job.status != Job.Status.DONE:
             raise RuntimeError(f"chunk {i} failed: {job.error}")
         say(f"  chunk {i}/{len(parts)} done in {job.stats.get('processing_seconds')} s")
@@ -171,8 +171,12 @@ def precompute(slug: str, stdout=None, max_chunk_km2: float | None = None) -> Jo
         except Exception as exc:
             stats["validation"] = {"available": False, "reason": f"Validation could not run: {exc}"}
         epochs = ["single"]
+        stats["imagery"] = _measure_imagery(parent, done)
     else:
+        from apps.change.services import imagery_stats
+
         epochs = ["before", "after"]
+        stats["imagery"] = imagery_stats(parent)
     center = (bbox_poly.centroid.x, bbox_poly.centroid.y)
     for ep in epochs:
         data = _merge_pointclouds([pointcloud_path(j, ep) for j in done], center, epsg)
@@ -188,6 +192,30 @@ def precompute(slug: str, stdout=None, max_chunk_km2: float | None = None) -> Jo
     Job.objects.filter(id__in=[j.id for j in done]).delete()
     parent.refresh_from_db()
     return parent
+
+
+def _measure_imagery(parent: Job, done: list[Job]) -> dict:
+    """Overlays for the merged area plus the chunks' vegetation checks added up."""
+    from apps.imagery.services import run_display_imagery
+
+    vegs = [j.stats.get("imagery", {}).get("vegetation") or {} for j in done]
+    ok = [v for v in vegs if v.get("available")]
+    veg = {
+        "available": bool(ok),
+        "applied": any(v.get("applied") for v in ok),
+        "year": ok[0].get("year") if ok else None,
+        "flagged": sum(v.get("flagged", 0) for v in ok),
+        "removed": sum(v.get("removed", 0) for v in ok),
+    }
+    if not ok:
+        veg["reason"] = next((v.get("reason") for v in vegs if v.get("reason")), "No imagery check ran.")
+    try:
+        out = run_display_imagery(parent)
+    except Exception as exc:
+        log.exception("imagery overlays failed for showcase %s", parent.pk)
+        out = {"available": False, "reason": f"Imagery could not be prepared: {exc}"}
+    out["vegetation"] = veg
+    return out
 
 
 def _merge_stats(parent: Job, done: list[Job], epsg: int) -> dict:

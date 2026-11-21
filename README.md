@@ -52,12 +52,14 @@ flowchart LR
     end
     EPT[USGS 3DEP<br/>Entwine Point Tiles on AWS]
     REF[Overture Maps / OSM<br/>reference footprints]
+    IMG[USDA NAIP via Planetary Computer<br/>PDOK luchtfoto]
 
-    UI -- "POST /api/jobs, poll status,<br/>GeoJSON, MVT, point cloud" --> API
+    UI -- "POST /api/jobs, poll status,<br/>GeoJSON, MVT, point cloud, imagery" --> API
     API --> DB
     API -- queue --> R --> W
     W -- stream points for the area --> EPT
     W -- validation --> REF
+    W -- yearly aerial images --> IMG
     W --> DB
     W --> M
 ```
@@ -73,6 +75,11 @@ flowchart LR
    Every job is then scored against Overture Maps (or OpenStreetMap) footprints.
 5. **Compare.** Change mode measures two surveys on the same grid, aligns them vertically on stable ground,
    differences them and classifies each change as new, demolished, raised, lowered, extended or reduced.
+6. **Cross-check with aerial imagery.** Yearly aerial images (USDA NAIP in the US, PDOK luchtfoto in the
+   Netherlands) are fetched for the area. In Change mode each change is checked against the images nearest the
+   two surveys, and the image years in between narrow down when it became visible, which two LiDAR surveys
+   alone cannot. In Measure mode near-infrared (NDVI) removes footprints that are mostly tree crown. The images
+   are also map layers, with a year timeline and the before/after swipe.
 
 The full method, tuning history and limits are in [docs/METHOD.md](docs/METHOD.md).
 
@@ -83,10 +90,16 @@ matching one-to-one at IoU ≥ 0.5. Height error is the mean absolute difference
 
 | Area | Survey | F1 | Mean IoU | Height error (buildings compared) |
 |---|---|---|---|---|
-| Seattle, Capitol Hill (houses, mature trees) | King County 2021 | 0.74 | 0.78 | 2.2 m (241) |
+| Seattle, Capitol Hill (houses, mature trees) | King County 2021 | 0.76 | 0.78 | 2.2 m (241) |
 | Chicago, Lincoln Park (row houses, garages) | Cook County 2017 | 0.41 | 0.69 | 1.4 m (114) |
 | New York, Midtown (towers, shared walls) | NYC 2014 | 0.22 | 0.68 | 10.0 m (46) |
-| Measure showcase: Midtown, 1.1 km² (1,714 buildings) | NYC 2014 | 0.19 | 0.68 | 10.5 m (234) |
+| Measure showcase: Midtown, 1.1 km² (1,690 buildings) | NYC 2014 | 0.19 | 0.68 | 10.6 m (231) |
+
+Seattle and the Midtown showcase were recomputed on 2026-11-21 with the aerial imagery vegetation check
+(on by default); the Chicago and smaller Midtown rows are from before it. In Seattle the check removed 18
+footprints, none of them matched to a reference building, raising precision from 0.74 to 0.79 and F1 from
+0.74 to 0.76. In Midtown it removed 24 and F1 moved from 0.1931 to 0.1927 (234 to 231 matched buildings):
+leaning towers in the photos make it less reliable there.
 
 **Where it works well:** detached and semi-detached buildings, where outlines are unambiguous: F1 around
 0.75 and heights within about 2 m.
@@ -97,6 +110,13 @@ Midtown's only survey is also from 2014, so newer buildings count as errors.
 The Change showcase (Denver, Union Station, 2013 to 2020) finds 144 changes, among them 70 new and 31
 demolished buildings, after aligning the two surveys by −3.3 cm on stable ground.
 
+Against NAIP aerial imagery (2013, 2015, 2017, 2019, 2021), ranked against 280 unchanged buildings of
+similar height, 37 of the 70 new buildings are confirmed or likely, as are 11 of the 31 demolished ones and
+none of the 7 height-only reductions. The image years date the confirmed and likely changes inside the
+2013-2020 survey gap: 8 first visible in 2015, 19 in 2017, 27 in 2019 and 10 in 2021. The largest
+"demolished" feature, a 2,372 m² sliver on the rail tracks, shows no change at all in the imagery, which
+supports the earlier suspicion that it is a train standing in one survey.
+
 ## Limits
 
 - Heights are relative to the ground model; steep slopes inflate the downhill side.
@@ -104,7 +124,9 @@ demolished buildings, after aligning the two surveys by −3.3 cm on stable grou
 - Floors assume 3 m per floor.
 - Change mode compares surveys of different density and season; the density ratio and vertical noise are
   shown with each result. Changes smaller than one floor (2.5 m) are not reported.
-- Change detection has no independent reference yet, so no accuracy numbers are given for it.
+- Change detection has no independent reference yet, so no accuracy numbers are given for it. The imagery
+  check is corroboration, not ground truth: aerial photos differ from year to year even where nothing changed
+  (sun, season, building lean), so a change it does not confirm is not necessarily wrong.
 
 ## Run it
 
@@ -167,6 +189,7 @@ Skyscan/
       lidar/           source adapters (USGS EPT, AHN tiles, local LAS), processing pipeline
       detection/       measure jobs, buildings, validation, exports, jobs API
       change/          change jobs and change features
+      imagery/         NAIP and PDOK aerial imagery, change corroboration, NDVI vegetation check
       tiles/           MVT endpoints
   docs/
     METHOD.md          how detection, validation and change detection work
@@ -180,6 +203,9 @@ Skyscan/
 - LiDAR: **USGS 3D Elevation Program (3DEP)**, public domain, via the AWS Open Data `usgs-lidar-public` bucket.
 - LiDAR (Netherlands): **Actueel Hoogtebestand Nederland (AHN2-AHN5)**, CC0, via the GeoTiles mirror (TU Delft).
 - Reference footprints: **Overture Maps Foundation** and **© OpenStreetMap contributors** (ODbL).
+- Aerial imagery (US): **USDA National Agriculture Imagery Program (NAIP)**, public domain, via Microsoft
+  Planetary Computer.
+- Aerial imagery (Netherlands): **Beeldmateriaal Nederland** luchtfoto via PDOK, CC BY 4.0.
 - Basemap: **© Mapbox**.
 
 More sources, including European LiDAR portals, are listed in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).

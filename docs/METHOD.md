@@ -246,6 +246,87 @@ Each AHN job decompresses whole 1 x 1.25 km tiles (30-50 million points) to
 crop them, so a cached 0.3 km² job takes about 3-4 minutes; the first job on
 new tiles adds the download (about 1-2 minutes per tile).
 
+## 3c. Aerial imagery: corroboration, timing and vegetation
+
+LiDAR surveys are years apart (Denver: 2013 and 2020). Aerial photos are
+flown far more often: USDA NAIP covers each US state every 2-3 years, PDOK
+publishes a national Dutch orthophoto every year (sources in
+[DATA_SOURCES.md](DATA_SOURCES.md)). Imagery cannot measure height, so it is
+used for three things it can do (`backend/apps/imagery`).
+
+**Preparation.** Every image year covering the job area is resampled onto one
+Web Mercator grid at about 0.5 m, so years line up pixel for pixel and the
+same picture is placed on the map by its four corners. Each year's bands (red,
+green, blue, and near-infrared where available) are standardised by the
+scene's median and 5-95 % range, which cancels exposure and colour-balance
+differences between years.
+
+**Corroboration.** Two photos of an unchanged building still differ: sun angle
+and shadows, season, pixel size, and above all lean, since these are not true
+orthophotos and tall roofs shift with the camera position. A fixed threshold
+therefore does not work, and an early version using one (median + 3 MAD of
+unchanged buildings, on mean footprint colours) confirmed only 9 of Denver's 70
+new buildings, although the photos plainly show the Railyards going from
+empty lots to a dense district. The method that works:
+
+1. Smooth both years to about 2 m, which absorbs small shifts, resolution
+   differences and shadow edges but keeps a lot turning into a roof.
+2. Per pixel, take the RMS change over the shared standardised bands, and
+   average it inside each change footprint (shrunk by 1 m).
+3. Rank it against the same measure for unchanged buildings (after-survey
+   footprints touching no change) of similar height: under 15 m, 15-40 m,
+   over 40 m. **Confirmed** beats 90 % of them, **likely** 75 %; otherwise
+   **not visible**.
+
+The two image years compared are the last image at or before the first survey
+and the first at or after the second.
+
+**Timing.** For a confirmed or likely change, each image year in between is
+ranked the same way against the before image. The first year from which every
+later image already differs (a construction site counts) is reported as
+"visible from", with the image year before it as the start of the window.
+
+**Vegetation.** NDVI from the near-infrared band flags footprints that are at
+least half vegetation and under 30 m. The pixels are digital numbers, not
+reflectance, and their near-infrared calibration varies between years (a
+Denver lawn reads NDVI 0.06 in 2013 and 0.47 in 2021), so the cut-off is set per
+image: halfway between the scene median and its 99th percentile. A first
+version used Otsu with a floor of median + 0.12, which put the cut-off near 0
+and called bright white roofs vegetation; it flagged 31 Denver changes, among
+them the largest new building. In Measure mode, flagged footprints are removed
+(parameter `vegetation_filter`, on by default) and every building stores its
+mean NDVI. In Change mode a change whose building side is mostly vegetation is
+marked **likely vegetation** (for example, a tree that grew taller and reads as
+"raised").
+
+### Results (computed 2026-11-21)
+
+Denver showcase, NAIP 2013-2021, 280 unchanged buildings as the reference:
+
+| Change type | Confirmed | Likely | Not visible |
+|---|---|---|---|
+| New (70) | 16 | 21 | 33 |
+| Demolished (31) | 5 | 6 | 20 |
+| Raised (29) | 9 | 5 | 15 |
+| Extended (4) | 1 | 0 | 3 |
+| Lowered (3) | 0 | 1 | 2 |
+| Reduced (7) | 0 | 0 | 7 |
+
+Height-only reductions are never visible from above, as expected. Of the 64
+confirmed or likely changes, 8 are first visible in 2015, 19 in 2017, 27 in
+2019 and 10 in 2021. The 2,372 m² "demolished" sliver on the tracks ranks at 0
+(no imagery change at all), supporting the train explanation in section 3. A
+64 m tower on a former rail yard ranks at 0.71, just short of "likely": its
+change is obvious by eye, but towers lean differently in every photo, so
+unchanged towers vary almost as much. The check is evidence, not ground truth.
+
+Vegetation check in Measure mode, validation against Overture as in section 2:
+
+| Area | Without | With | Removed |
+|---|---|---|---|
+| Seattle, Capitol Hill | P 0.744, R 0.733, F1 0.738 | P 0.788, R 0.733, F1 0.759 | 18, none matched to a reference building |
+| Midtown showcase | P 0.1365, R 0.330, F1 0.1931 (234 matched) | P 0.1367, R 0.326, F1 0.1927 (231 matched) | 24 |
+
 ## 4. Limits
 
 - Heights are relative to the ground model. On steep slopes the downhill side
@@ -258,6 +339,11 @@ new tiles adds the download (about 1-2 minutes per tile).
   roofs to every cue SKYSCAN uses and be reported as small buildings.
 - Change mode compares surveys of different density and season. Sparse
   surveys blur edges, and leaf-on versus leaf-off can change how trees look.
+- Aerial imagery leans: tall buildings are displaced in each photo by a
+  different amount, so the imagery check is weakest for towers, and the NDVI
+  vegetation check can occasionally remove a real building in a tower district.
+- Imagery checks need at least 8 unchanged buildings in the area to rank
+  against; small or fully redeveloped areas get "no imagery" instead.
   The density ratio and vertical noise are reported so you can judge this.
 - Vertical accuracy: 3DEP quality levels specify roughly 10 cm vertical error
   for good surveys; the measured noise between surveys is shown with each

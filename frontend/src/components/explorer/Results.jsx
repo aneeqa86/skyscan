@@ -8,11 +8,103 @@ import { EmptyState, HeightHistogram, KeyValues, SectionLabel, Spinner, StatCard
 import { cn, formatNumber } from '@/utils'
 import { centroid } from '@/utils/geo'
 import { CHANGE_BY_KEY, CHANGE_TYPES } from './changeTypes'
+import { IMAGERY_STATUS } from './imagery'
 import { buildingCode } from './MapChrome'
+
+/** Change mode: how the aerial imagery check came out across all changes. */
+function ChangeImageryBlock({ imagery }) {
+  if (!imagery) return null
+  const c = imagery.corroboration
+  return (
+    <Block aria-label="Aerial imagery check">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h3 className="m-0 text-sm font-medium">Aerial imagery check</h3>
+        {imagery.provider && <span className="font-mono text-[11px] text-muted">{imagery.provider.name}</span>}
+      </div>
+      {!imagery.available || !c?.reference_years ? (
+        <p className="m-0 text-[13px] text-muted">{c?.reason || imagery.reason || 'No aerial imagery was available.'}</p>
+      ) : (
+        <>
+          <KeyValues
+            items={[
+              ['Images', imagery.years.map((y) => y.year).join(', ')],
+              ['Compared', `${c.reference_years[0]} → ${c.reference_years[1]}`],
+              ...['confirmed', 'likely', 'not_visible', 'vegetation', 'too_small']
+                .filter((k) => c.totals?.[k])
+                .map((k) => [IMAGERY_STATUS[k].label, formatNumber(c.totals[k]), k === 'confirmed' ? 'orange' : undefined]),
+            ]}
+          />
+          <p className="m-0 mt-2.5 text-xs leading-normal text-muted">
+            Each change is ranked against {formatNumber(c.controls)} unchanged buildings of similar height: how much did the imagery change
+            there between {c.reference_years[0]} and {c.reference_years[1]} compared with them? Confirmed beats 90% of them, likely 75%.
+            Photos differ from year to year even where nothing changed, and height-only changes are often not visible from above.
+          </p>
+        </>
+      )}
+    </Block>
+  )
+}
+
+/** Measure mode: the NDVI vegetation check and the image years on offer. */
+function MeasureImageryBlock({ imagery }) {
+  const veg = imagery?.vegetation
+  if (!imagery || (!imagery.available && !veg?.available)) {
+    const reason = imagery?.reason || veg?.reason
+    return reason ? (
+      <Block>
+        <SectionLabel as="h3">Aerial imagery</SectionLabel>
+        <p className="m-0 mt-2 text-[13px] text-muted">{reason}</p>
+      </Block>
+    ) : null
+  }
+  return (
+    <Block aria-label="Aerial imagery">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h3 className="m-0 text-sm font-medium">Aerial imagery</h3>
+        {imagery.provider && <span className="font-mono text-[11px] text-muted">{imagery.provider.name}</span>}
+      </div>
+      <KeyValues
+        items={[
+          ...(imagery.years?.length ? [['Images', imagery.years.map((y) => y.year).join(', ')]] : []),
+          ...(veg?.available
+            ? [
+                ['Vegetation check', `${veg.year} image`],
+                [veg.applied ? 'Removed as trees' : 'Flagged as trees', formatNumber(veg.applied ? veg.removed : veg.flagged)],
+              ]
+            : veg?.reason
+              ? [['Vegetation check', 'not run']]
+              : []),
+        ]}
+      />
+      {veg?.available && (
+        <p className="m-0 mt-2.5 text-xs leading-normal text-muted">
+          Footprints under 30 m that are mostly vegetation in the near-infrared are treated as tree crowns, not buildings.
+        </p>
+      )}
+      {!veg?.available && veg?.reason && <p className="m-0 mt-2.5 text-xs text-muted">{veg.reason}</p>}
+    </Block>
+  )
+}
+
+function imageryRows(p) {
+  const s = IMAGERY_STATUS[p.imagery_status]
+  if (!s) return []
+  const rank = p.imagery_score != null ? ` · beats ${Math.round(p.imagery_score * 100)}%` : ''
+  const rows = [['Imagery', `${s.label}${rank}`, p.imagery_status === 'confirmed' ? 'orange' : undefined]]
+  if (p.imagery_first_year)
+    rows.push([
+      'Visible from',
+      p.imagery_window_start ? `${p.imagery_first_year} (not in ${p.imagery_window_start})` : `${p.imagery_first_year}`,
+    ])
+  return rows
+}
 
 function Shell({ status, children }) {
   return (
-    <aside aria-label="Results" className="flex max-w-full flex-[1_1_328px] flex-col overflow-y-auto border-l-hair border-line bg-panel lg:max-w-[328px]">
+    <aside
+      aria-label="Results"
+      className="flex max-w-full flex-[1_1_328px] flex-col overflow-y-auto border-l-hair border-line bg-panel lg:max-w-[328px]"
+    >
       <header className="flex items-center justify-between gap-2 border-b-hair border-line p-4">
         <h2 className="m-0 font-display text-lg font-medium">Results</h2>
         {status}
@@ -48,13 +140,25 @@ function ExportButtons({ onScreenshot, geojsonUrl }) {
 /** Skeleton state while a job runs, and the idle state before any job. */
 export function PendingResults({ processing, mode }) {
   return (
-    <Shell status={processing ? <StatusChip tone="orange" pulse>Processing</StatusChip> : <StatusChip>Ready</StatusChip>}>
+    <Shell
+      status={
+        processing ? (
+          <StatusChip tone="orange" pulse>
+            Processing
+          </StatusChip>
+        ) : (
+          <StatusChip>Ready</StatusChip>
+        )
+      }
+    >
       {processing ? (
         <>
           <Block className="grid grid-cols-2 gap-2" aria-label="Loading statistics">
-            {(mode === 'change' ? ['NEW', 'DEMOLISHED', 'RAISED', 'NET VOLUME'] : ['BUILDINGS', 'FOOTPRINT', 'MEDIAN H', 'TALLEST']).map((l, i) => (
-              <StatCard key={l} label={l} loading skeletonWidth={`${[70, 60, 50, 55][i]}%`} />
-            ))}
+            {(mode === 'change' ? ['NEW', 'DEMOLISHED', 'RAISED', 'NET VOLUME'] : ['BUILDINGS', 'FOOTPRINT', 'MEDIAN H', 'TALLEST']).map(
+              (l, i) => (
+                <StatCard key={l} label={l} loading skeletonWidth={`${[70, 60, 50, 55][i]}%`} />
+              )
+            )}
           </Block>
           <Block>
             <h3 className="m-0 mb-3 text-sm font-medium">{mode === 'change' ? 'Changes' : 'Height distribution'}</h3>
@@ -70,8 +174,8 @@ export function PendingResults({ processing, mode }) {
       ) : (
         <Block className="border-b-0">
           <EmptyState icon="area" title="Draw an area to begin">
-            Use the rectangle or polygon tool in the sidebar. Areas up to {mode === 'change' ? '0.5' : '1'} km² are supported,
-            or try a sample area.
+            Use the rectangle or polygon tool in the sidebar. Areas up to {mode === 'change' ? '0.5' : '1'} km² are supported, or try a
+            sample area.
           </EmptyState>
         </Block>
       )}
@@ -113,12 +217,15 @@ function AccuracyBlock({ validation }) {
           ['Recall', f(validation.recall)],
           ['F1', f(validation.f1)],
           ['Mean IoU', f(validation.mean_iou)],
-          ['Height error', validation.height_compared ? `${validation.height_mae_m} m (n=${validation.height_compared})` : 'no reference heights'],
+          [
+            'Height error',
+            validation.height_compared ? `${validation.height_mae_m} m (n=${validation.height_compared})` : 'no reference heights',
+          ],
         ]}
       />
       <p className="m-0 mt-2.5 text-xs text-muted">
-        {validation.true_positives} of {validation.reference} reference buildings matched. Turn on “Reference footprints” to
-        compare outlines.
+        {validation.true_positives} of {validation.reference} reference buildings matched. Turn on “Reference footprints” to compare
+        outlines.
       </p>
     </Block>
   )
@@ -201,6 +308,7 @@ export function MeasureResults({ job, layer, features, all, selected, onClearFil
                     ['Volume', `${formatNumber(sel.volume_m3)} m³`],
                     ['Rank', `Taller than ${rank}%`],
                     ['Confidence', formatNumber(sel.confidence, 2)],
+                    ...(sel.ndvi != null ? [['NDVI', formatNumber(sel.ndvi, 2)]] : []),
                     ['Centroid', `${c[1].toFixed(5)}, ${c[0].toFixed(5)}`],
                   ]}
                 />
@@ -212,6 +320,7 @@ export function MeasureResults({ job, layer, features, all, selected, onClearFil
             )}
           </Block>
           <AccuracyBlock validation={st.validation} />
+          <MeasureImageryBlock imagery={st.imagery} />
         </>
       )}
       <ExportButtons onScreenshot={onScreenshot} geojsonUrl={geojsonUrl} />
@@ -232,7 +341,10 @@ export function ChangeBadge({ type }) {
   const t = CHANGE_BY_KEY[type]
   if (!t) return null
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-badge border-hair px-1.5 py-0.5 font-mono text-[11px]" style={{ color: t.color, borderColor: t.color }}>
+    <span
+      className="inline-flex items-center gap-1.5 rounded-badge border-hair px-1.5 py-0.5 font-mono text-[11px]"
+      style={{ color: t.color, borderColor: t.color }}
+    >
       <span aria-hidden="true">{t.icon}</span>
       {t.label}
     </span>
@@ -255,7 +367,13 @@ export function ChangeResults({ job, layer, features, selected, onSelect, onScre
   const sel = selected?.properties
 
   return (
-    <Shell status={<StatusChip>{yb} → {ya} · {Math.round(st.processing_seconds ?? 0)} s</StatusChip>}>
+    <Shell
+      status={
+        <StatusChip>
+          {yb} → {ya} · {Math.round(st.processing_seconds ?? 0)} s
+        </StatusChip>
+      }
+    >
       {layer.loading && (
         <Block>
           <Spinner label="Loading changes" className="text-sm text-muted" />
@@ -278,7 +396,10 @@ export function ChangeResults({ job, layer, features, selected, onSelect, onScre
             <KeyValues
               items={[
                 ['Surveys', `${yb} → ${ya}`],
-                ['Densities', `${formatNumber(st.before?.observed_density_ppm2, 1)} / ${formatNumber(st.after?.observed_density_ppm2, 1)} pts/m²`],
+                [
+                  'Densities',
+                  `${formatNumber(st.before?.observed_density_ppm2, 1)} / ${formatNumber(st.after?.observed_density_ppm2, 1)} pts/m²`,
+                ],
                 ['Vertical alignment', `${signed(st.vertical_offset_m, 2)} m`],
                 ['Ground noise', st.vertical_noise_m != null ? `±${st.vertical_noise_m} m` : '-'],
               ]}
@@ -298,10 +419,15 @@ export function ChangeResults({ job, layer, features, selected, onSelect, onScre
                   ['Area', `${formatNumber(sel.area_m2)} m²`],
                   ['Volume', `${signed(sel.volume_delta_m3)} m³`],
                   ['Confidence', formatNumber(sel.confidence, 2)],
+                  ...imageryRows(sel),
                 ]}
               />
+              {IMAGERY_STATUS[sel.imagery_status] && (
+                <p className="m-0 mt-2.5 text-xs leading-normal text-muted">{IMAGERY_STATUS[sel.imagery_status].hint}</p>
+              )}
             </Block>
           )}
+          <ChangeImageryBlock imagery={st.imagery} />
           <section className="border-b-hair border-line">
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
               <h3 className="m-0 text-sm font-medium">
@@ -309,7 +435,11 @@ export function ChangeResults({ job, layer, features, selected, onSelect, onScre
               </h3>
               <label className="flex items-center gap-2 text-xs text-muted">
                 Sort
-                <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-control border-hair border-line-strong bg-raised px-2 text-xs text-fg">
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                  className="h-9 rounded-control border-hair border-line-strong bg-raised px-2 text-xs text-fg"
+                >
                   <option value="area">Area</option>
                   <option value="height">Height change</option>
                   <option value="volume">Volume change</option>

@@ -72,7 +72,8 @@ export default function MapView({ initialView, drawMode, onAoiDrawn, onDrawClear
     m.addControl(
       new mapboxgl.AttributionControl({
         compact: true,
-        customAttribution: 'LiDAR: USGS 3DEP, AHN · Footprints: Overture Maps, © OpenStreetMap contributors',
+        customAttribution:
+          'LiDAR: USGS 3DEP, AHN · Footprints: Overture Maps, © OpenStreetMap contributors · Imagery: USDA NAIP, Beeldmateriaal Nederland (PDOK)',
       }),
       'bottom-right'
     )

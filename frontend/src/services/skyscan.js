@@ -62,6 +62,11 @@ const SkyscanService = {
     return apiUrl(`/jobs/${id}/export/?${q}`)
   },
 
+  /** One year's aerial image for a job area (placed by job.stats.imagery.corners). */
+  imageryUrl(id, year) {
+    return apiUrl(`/jobs/${id}/imagery/${year}/`)
+  },
+
   coverageTiles() {
     return apiUrl('/tiles/coverage/{z}/{x}/{y}.mvt')
   },

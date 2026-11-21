@@ -77,7 +77,19 @@ def choose_pair(job: Job):
     return full[b_id], full[a_id]
 
 
-def run_change_job(job_id) -> Job:
+def imagery_stats(job: Job) -> dict:
+    """Corroborate the job's changes with yearly aerial imagery; never fails the job."""
+    from apps.imagery.services import run_change_imagery
+
+    try:
+        return run_change_imagery(job)
+    except Exception as exc:
+        log.exception("imagery check failed for change job %s", job.pk)
+        return {"available": False, "reason": f"Imagery check failed: {exc}"}
+
+
+def run_change_job(job_id, imagery: bool = True) -> Job:
+    """imagery=False skips the aerial imagery check (showcase chunks; the merged job runs it once)."""
     job = Job.objects.get(pk=job_id)
     progress = make_progress(job)
     t0 = time.monotonic()
@@ -123,6 +135,9 @@ def run_change_job(job_id) -> Job:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
         stats = dict(result.stats)
+        if imagery:
+            progress("comparing", 94, "Checking changes against aerial imagery")
+            stats["imagery"] = imagery_stats(job)
         stats["pointcloud_bytes"] = {"before": len(result.pointcloud_before), "after": len(result.pointcloud_after)}
         stats["processing_seconds"] = round(time.monotonic() - t0, 1)
         Job.objects.filter(pk=job.pk).exclude(status__in=Job.TERMINAL).update(

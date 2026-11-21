@@ -20,9 +20,12 @@ from apps.lidar.pipeline.aoi import AoiError, validate_aoi
 from .models import Building, Job, ReferenceFootprint
 from .services import cancel_job, pointcloud_path
 
-BUILDING_PROPS = ["epoch", "area_m2", "height_m", "max_height_m", "est_floors", "volume_m3", "point_count", "confidence"]
+BUILDING_PROPS = [
+    "epoch", "area_m2", "height_m", "max_height_m", "est_floors", "volume_m3", "point_count", "confidence", "ndvi",
+]
 CHANGE_PROPS = [
     "change_type", "height_before_m", "height_after_m", "delta_height_m", "area_m2", "volume_delta_m3", "confidence",
+    "imagery_status", "imagery_score", "imagery_first_year", "imagery_window_start",
 ]
 REFERENCE_PROPS = ["source", "source_id", "height_m", "matched", "iou"]
 
@@ -76,7 +79,7 @@ class JobCreateSerializer(serializers.Serializer):
     def validate_params(self, params):
         clean = {}
         for k, v in params.items():
-            if k == "regularize":
+            if k in ("regularize", "vegetation_filter"):
                 clean[k] = bool(v)
             elif k == "method":
                 if v not in ("auto", "class6", "ndsm"):
@@ -205,6 +208,20 @@ class JobViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.List
         resp["Cache-Control"] = "public, max-age=31536000, immutable"
         return resp
 
+    @extend_schema(responses={(200, "image/jpeg"): OpenApiTypes.BINARY})
+    @action(detail=True, methods=["get"], url_path=r"imagery/(?P<year>\d{4})")
+    def imagery(self, request, pk=None, year=None):
+        """One year's aerial image for the job area (corners in stats.imagery.corners)."""
+        from apps.imagery.services import image_path
+
+        job = self.get_object()
+        path = image_path(job, int(year))
+        if not path.exists():
+            raise Http404("No imagery for this job and year.")
+        resp = FileResponse(open(path, "rb"), content_type="image/jpeg")
+        resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
     @extend_schema(
         parameters=[
             OpenApiParameter("format", OpenApiTypes.STR, enum=["geojson", "csv"]),
@@ -229,9 +246,11 @@ class JobViewSet(mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.List
             if request.query_params.get("epoch"):
                 qs = qs.filter(epoch=request.query_params["epoch"])
         name = f"skyscan_{job.mode}_{layer}_{str(job.id)[:8]}"
-        attribution = " / ".join(
-            sorted({d.attribution for d in (job.dataset, job.dataset_before) if d is not None})
-        )
+        sources = {d.attribution for d in (job.dataset, job.dataset_before) if d is not None}
+        img = (job.stats or {}).get("imagery") or {}
+        if img.get("available") or (img.get("vegetation") or {}).get("available"):
+            sources.add((img.get("provider") or {}).get("attribution") or "Aerial imagery")
+        attribution = " / ".join(sorted(s for s in sources if s))
         if fmt == "geojson":
             data = feature_collection(qs, geom, props, extra={"attribution": attribution, "job": str(job.id)})
             return geojson_response(data, filename=f"{name}.geojson")
